@@ -104,6 +104,19 @@ Every receipt photo is already stored in Drive and is NEVER deleted. For every `
 7. A server-side job (`EV_receiptReport`) emails Matt + Todd every 3 days listing any Receipt Log rows
    whose "Issue / discrepancy" column is non-blank - so do NOT email per receipt; just populate that
    column accurately and the 3-day digest handles the rest.
+8. **Cross-reference receipts to JOBS (do this as Dispatch fills in).** For each receipt, look at the
+   receipt's date and `readTab Dispatch`: if a job was running that day (or the rep typed a job in the
+   `job` field, or the GPS/location matches a job address), tie the receipt to it - put the Job ID in
+   the Receipt Log "Job / reason" column and roll the cost into that job's **Job P&L** material/fuel
+   actuals. This is how each job's true cost (and real margin) gets built. If the link is ambiguous,
+   note your best guess in the Issue column rather than forcing it.
+
+**CROSS-REFERENCE EVERYTHING (standing principle).** Treat every input as data that compounds. On each
+run, look for links across tabs even when a single datapoint seems trivial: receipts <-> Dispatch jobs
+<-> Job P&L; vendors <-> Price Log price trends <-> Suppliers; leads <-> Source <-> conversion rate;
+GPS/location <-> job addresses <-> travel/fuel; weather <-> scheduling. Surface what you find as
+Insights (via the `insight` action). Small patterns become valuable over time - never discard a
+datapoint as insignificant.
 
 **`pricelog` â†’ `Price Log`** (header 5, data 6+, `startCol=1`)
 `[ A Date(DATE:), B Supplier, C Product name, D Brand, E SKU, F Category, G Unit type,

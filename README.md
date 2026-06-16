@@ -140,6 +140,23 @@ Gemini-powered **receipt OCR** (`EV_ocrReceipt_`) and a short **"what to watch" 
 
 ---
 
+## Every input is data — how captures become optimization
+
+Nothing captured is "just a photo" or "just a note." Each input is geotagged, timestamped, and
+cross-referenced against the rest, so small, individually-insignificant data points compound into
+patterns the brain can act on.
+
+**What gets gathered**
+- **Location** — GPS is attached to job photos, before/after shots, leads, quotes, *and receipts*. Every capture knows *where* it happened.
+- **Travel** — capture locations + job addresses (Dispatch) let the brain reason about distance, drive time, and fuel against the value of each job ("you drove 45 min for a $180 job").
+- **Quotes** — sq ft, blast depth, rate, access factor, win/loss, and realized $/sq ft feed pricing optimization and the break-even check.
+- **Receipts** — vendor, every line item, unit price, GST, payment method, and date — **full resolution, never downscaled** — tied to the job(s) running that day via Dispatch, so each job's true material + fuel cost is known.
+- **Everything else** — supplier prices over time, lead source → conversion, inventory burn, weather vs scheduling, client ratings. All of it.
+
+**How it becomes optimization.** The Business Brain (`EV_generateInsights`) plus the router's research pass cross-reference these inputs and surface ranked, plain-English suggestions daily — cheaper sourcing, pricing that's slipping, jobs whose travel eats the margin, vendors creeping up, the best day to schedule. They ride along in the morning email and the 💡 Insights feed, and the engine learns which ones matter from your Importance ratings. **The compounding is the point: the more you capture, the sharper the suggestions get over time.**
+
+**Image integrity is non-negotiable.** Receipt, invoice, and paperwork photos upload at full original resolution — never downscaled or re-encoded — because they are financial and tax records and OCR can't read a degraded image. Nothing captured is ever deleted.
+
 ## 🛟 Data safety — backups that can't be deleted by accident
 
 The Ops Workbook is the irreplaceable structured database for the whole business. [`Backups.gs`](Backups.gs) protects it:
@@ -174,6 +191,7 @@ The Ops Workbook is the irreplaceable structured database for the whole business
 | [`appsscript.json`](appsscript.json) | Project manifest (OAuth scopes + web-app settings) |
 | [`claude-router-task.md`](claude-router-task.md) | The scheduled Claude agent's playbook — column maps, quoting steps, audit rules |
 | [`DEPLOY.md`](DEPLOY.md) | ~15-minute deployment guide |
+| [`WORKBOOK-SCHEMA.md`](WORKBOOK-SCHEMA.md) | The blank Ops Workbook structure — every tab + columns, no business data |
 | `app-frame/` | The custom-subdomain iframe wrapper + home-screen icon |
 
 > **All IDs, the deployment URL, the router secret, the owner email, and the seed PINs in this repo are placeholders** (`YOUR_SPREADSHEET_ID`, `YOUR_ROUTER_SECRET`, `manager@yourcompany.com`, `'0000'`, …). Drop in your own. No live credentials are committed.

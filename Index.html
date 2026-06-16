@@ -396,6 +396,7 @@ var CATS=[
     {k:'what',label:'What was purchased',type:'text',ph:'e.g. Corn cob media, 40 lb'},
     {k:'category',label:'Category',type:'select',list:'expcat'},
     {k:'job',label:'Job / reason',type:'text',ph:'e.g. Al\'s driveway'},
+    {k:'location',type:'location'},
     {k:'notes',label:'Notes',type:'textarea'}
   ]},
   {id:'job_photo',ic:'📸',label:'Job Photo',sub:'On-site shots',blurb:'Capture the work. Location is attached automatically so it lands on the right job.',fields:[
@@ -789,7 +790,10 @@ function handlePhotos(files,key){
     var t=file.type||'';
     if(t && t.indexOf('image')!==0 && !/\.(jpe?g|png|heic|heif|webp|gif|bmp)$/i.test(file.name||''))return;
     var reader=new FileReader();
-    reader.onload=function(ev){downscale(ev.target.result,file.name,t,key);};
+    // IMAGE INTEGRITY: upload the ORIGINAL file at full resolution — never downscale or
+    // re-encode. Receipts/invoices are financial + tax records and OCR needs full detail;
+    // image integrity is non-negotiable. (Uploads go one-at-a-time so size stays manageable.)
+    reader.onload=function(ev){pushRaw(ev.target.result,file.name,t,key);renderThumbs(key);};
     reader.onerror=function(){toast('Couldn\'t read that photo — try again',true);};
     reader.readAsDataURL(file);
   });
