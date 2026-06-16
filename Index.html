@@ -155,6 +155,20 @@ textarea{min-height:96px;resize:vertical;line-height:1.5}
 .badge.new{background:var(--lime-dim);color:var(--lime);border:1px solid rgba(0,255,65,.35)}
 .badge.filed{background:rgba(255,255,255,.08);color:var(--dim);border:1px solid var(--border)}
 .empty{text-align:center;color:var(--faint);padding:26px 10px;font-size:.86rem}
+.feed-item{transition:.15s var(--ease)} .feed-item:hover{border-color:var(--lime);transform:translateY(-1px)}
+.feed-item .chev{color:var(--faint);font-size:1.2rem;margin-left:4px}
+.loadmore{width:100%;margin-top:10px;background:var(--surface);border:1px solid var(--border);color:var(--dim);
+  font-family:var(--font);padding:12px;border-radius:var(--radius-sm);cursor:pointer;font-size:.78rem;
+  text-transform:uppercase;letter-spacing:.08em}
+.loadmore:hover{border-color:var(--lime);color:var(--lime)}
+.caprow{display:flex;gap:12px;padding:9px 0;border-bottom:1px solid var(--border)}
+.capk{flex:0 0 38%;color:var(--faint);font-size:.78rem;text-transform:capitalize}
+.capv{flex:1;color:var(--text);font-size:.9rem;word-break:break-word;white-space:pre-wrap}
+.capfiled{background:var(--lime-dim);color:var(--lime);border:1px solid rgba(0,255,65,.3);border-radius:8px;
+  padding:8px 12px;font-size:.8rem;margin-bottom:10px}
+.capphotos{display:flex;flex-wrap:wrap;gap:8px;margin-top:14px}
+.capphoto{background:var(--surface-2);border:1px solid var(--border);color:var(--lime);text-decoration:none;
+  padding:10px 14px;border-radius:var(--radius-sm);font-size:.82rem}
 
 /* ===== FORM screen ===== */
 .form-head{display:flex;align-items:center;gap:12px;padding:22px 2px 6px}
@@ -346,6 +360,17 @@ footer{text-align:center;padding:30px 0 10px;color:var(--faint);font-size:.66rem
   </div>
 </div>
 
+<!-- capture detail modal -->
+<div class="modal" id="capModal">
+  <div class="sheet">
+    <div style="display:flex;align-items:flex-start">
+      <div style="flex:1"><h2 id="capTitle">Capture</h2><p class="dim" id="capSub" style="font-size:.78rem;margin-top:2px"></p></div>
+      <button class="ghost-btn" onclick="closeCapture()">Close</button>
+    </div>
+    <div id="capBody" style="margin-top:14px"></div>
+  </div>
+</div>
+
 <script>
 /* ================= dev/preview shim — only runs if Apps Script absent ========= */
 (function(){
@@ -379,6 +404,19 @@ footer{text-align:center;padding:30px 0 10px;color:var(--faint);font-size:.66rem
   R.apiUploadPhoto=function(){return {ok:true,link:'https://drive.google.com/demo-photo'};};
   R.apiSubmit=function(){return {ok:true,id:'SUB-DEMO',message:'Captured (demo).'};};
   R.apiRecent=function(){return {ok:true,items:recent};};
+  R.apiCaptureHistory=function(t,limit,offset){
+    var all=[
+      {id:'SUB-7',time:'Jun 15, 2026 · 10:21 PM',by:'Matt',category:'Receipt / Expense',summary:'Home Hardware · $170.71',status:'FILED',filedTo:'Expenses!row18',location:'Edmonton, AB',fields:{date:'2026-06-15',vendor:'Home Hardware',total:'170.71',what:'Fasteners, tarp',category:'Shop supplies'},photoLinks:['https://drive.google.com/demo-receipt']},
+      {id:'SUB-6',time:'Jun 15, 2026 · 10:16 PM',by:'Matt',category:'Receipt / Expense',summary:'Shell Canada · $40',status:'FILED',filedTo:'Expenses!row17',location:'Edmonton, AB',fields:{date:'2026-06-15',vendor:'Shell Canada',total:'40.00',what:'Diesel',category:'Fuel / Diesel'},photoLinks:['https://drive.google.com/demo-receipt']},
+      {id:'SUB-5',time:'Jun 15, 2026 · 10:12 PM',by:'Matt',category:'Receipt / Expense',summary:'Canadian Tire · $209.99',status:'FILED',filedTo:'Expenses!row14',location:'Edmonton, AB',fields:{date:'2026-06-15',vendor:'Canadian Tire',total:'209.99',what:'Nozzles, PPE'},photoLinks:['https://drive.google.com/demo-receipt']},
+      {id:'SUB-4',time:'Jun 14, 2026 · 4:48 PM',by:'Matt',category:'New Lead',summary:'587-783-3302 · Leduc full property',status:'FILED',filedTo:'Leads',fields:{phone:'587-783-3302',service:'Full property blast',address:'Leduc'},photoLinks:[]},
+      {id:'SUB-3',time:'Jun 14, 2026 · 2:02 PM',by:'Todd',category:'Job Photo',summary:'Al\'s Atomic — driveway before',status:'NEW',fields:{customer:'Al\'s Atomic',stage:'Before'},photoLinks:['https://drive.google.com/demo-photo']},
+      {id:'SUB-2',time:'Jun 13, 2026 · 9:14 AM',by:'Jesse',category:'Receipt / Expense',summary:'Consolidated Compressor · $350.00',status:'FILED',filedTo:'Expenses',fields:{vendor:'Consolidated Compressor',total:'350.00',what:'Compressor service'},photoLinks:['https://drive.google.com/demo-receipt']},
+      {id:'SUB-1',time:'Jun 12, 2026 · 8:00 AM',by:'Todd',category:'Request / Report',summary:'Add a daily truck-check button',status:'NEEDS REVIEW',fields:{request_type:'New feature',description:'Add a daily truck-check button',priority:'Medium'},photoLinks:[]}
+    ];
+    offset=offset||0; var slice=all.slice(offset,offset+(limit||15));
+    return {ok:true,items:slice,more:(offset+slice.length)<all.length,total:all.length};
+  };
   R.apiAddUser=function(t,n){return {ok:true,message:n+' added (demo).'};};
   R.apiListUsers=function(){return {ok:true,users:[{name:'Todd',role:'admin',active:'Yes'},{name:'Matt',role:'admin',active:'Yes'},{name:'Jesse',role:'crew',active:'Yes'}]};};
   var scriptObj={}; Object.defineProperty(scriptObj,'run',{get:function(){return makeRunner();}});
@@ -671,22 +709,68 @@ function buildTiles(){
     g.appendChild(d);
   });
 }
+var FEED={items:[],offset:0,more:false,loading:false};
 function loadFeed(){
-  call('apiRecent',[S.token,12],function(res){
-    var f=document.getElementById('feed');
-    if(res&&!res.ok&&/sign in/i.test(res.error||'')){signOut();return;}
-    if(!res.ok||!res.items||!res.items.length){f.innerHTML='<div class="empty">Nothing yet — be the first to log something today.</div>';return;}
-    f.innerHTML='';
-    res.items.forEach(function(it){
-      var filed=it.status==='FILED'||it.filedTo;
-      var badge=filed?'<span class="badge filed">'+(it.filedTo||'Filed')+'</span>':'<span class="badge new">In queue</span>';
-      var d=document.createElement('div');d.className='feed-item';
-      d.innerHTML='<div class="fic">'+(it.hasPhoto?'📷':'📝')+'</div>'+
-        '<div class="meta"><b>'+esc(it.summary||it.category)+'</b><small>'+esc(it.category)+' · '+esc(it.by)+' · '+esc(it.time)+'</small></div>'+badge;
-      f.appendChild(d);
-    });
-  });
+  FEED={items:[],offset:0,more:false,loading:false};
+  document.getElementById('feed').innerHTML='<div class="empty">Loading recent activity…</div>';
+  fetchFeed(true);
 }
+function fetchFeed(reset){
+  if(FEED.loading)return; FEED.loading=true;
+  call('apiCaptureHistory',[S.token,15,FEED.offset],function(res){
+    FEED.loading=false;
+    if(res&&!res.ok&&/sign in/i.test(res.error||'')){signOut();return;}
+    if(!res||!res.ok){if(reset)document.getElementById('feed').innerHTML='<div class="empty">Couldn\'t load — tap a tile to refresh.</div>';return;}
+    FEED.items=FEED.items.concat(res.items||[]);
+    FEED.offset=FEED.items.length;
+    FEED.more=!!res.more;
+    renderFeed();
+  },function(){FEED.loading=false;});
+}
+function renderFeed(){
+  var f=document.getElementById('feed');
+  if(!FEED.items.length){f.innerHTML='<div class="empty">Nothing yet — be the first to log something today.</div>';return;}
+  f.innerHTML='';
+  FEED.items.forEach(function(it,idx){
+    var filed=/filed/i.test(it.status||'')||it.filedTo;
+    var badge=filed?'<span class="badge filed">'+esc(it.filedTo||'Filed')+'</span>':'<span class="badge new">'+esc(it.status||'In queue')+'</span>';
+    var hasPhoto=(it.photoLinks&&it.photoLinks.length);
+    var d=document.createElement('div');d.className='feed-item';d.style.cursor='pointer';
+    d.onclick=(function(i){return function(){openCapture(i);};})(idx);
+    d.innerHTML='<div class="fic">'+(hasPhoto?'📷':'📝')+'</div>'+
+      '<div class="meta"><b>'+esc(it.summary||it.category)+'</b><small>'+esc(it.category)+' · '+esc(it.by)+' · '+esc(it.time)+'</small></div>'+badge+'<span class="chev">›</span>';
+    f.appendChild(d);
+  });
+  if(FEED.more){
+    var m=document.createElement('button');m.className='loadmore';m.textContent='Load older ↓';
+    m.onclick=function(){m.textContent='Loading…';fetchFeed(false);};
+    f.appendChild(m);
+  }
+}
+function openCapture(i){
+  var it=FEED.items[i];if(!it)return;
+  var rows='';
+  Object.keys(it.fields||{}).forEach(function(k){
+    if(k==='photo'||k==='before'||k==='after')return;
+    var v=it.fields[k]; if(v==null||v==='')return;
+    rows+='<div class="caprow"><span class="capk">'+esc(k)+'</span><span class="capv">'+esc(v)+'</span></div>';
+  });
+  if(!rows)rows='<div class="dim" style="font-size:.85rem;padding:4px 0">No typed fields — this capture was a photo/note.</div>';
+  var photos='';
+  (it.photoLinks||[]).forEach(function(p){
+    var url=String(p).replace(/^[A-Za-z]+:\s*/,'');
+    if(url)photos+='<a href="'+esc(url)+'" target="_blank" rel="noopener" class="capphoto">📷 View photo</a>';
+  });
+  var loc=it.location?'<div class="caprow"><span class="capk">location</span><span class="capv">'+esc(it.location)+'</span></div>':'';
+  var notes=it.claudeNotes?'<div class="caprow"><span class="capk">brain notes</span><span class="capv">'+esc(it.claudeNotes)+'</span></div>':'';
+  document.getElementById('capTitle').textContent=it.category||'Capture';
+  document.getElementById('capSub').textContent=(it.by||'')+' · '+(it.time||'')+(it.status?(' · '+it.status):'');
+  document.getElementById('capBody').innerHTML=
+    (it.filedTo?'<div class="capfiled">Filed to: '+esc(it.filedTo)+'</div>':'')+
+    rows+loc+notes+(photos?'<div class="capphotos">'+photos+'</div>':'');
+  document.getElementById('capModal').classList.add('show');
+}
+function closeCapture(){document.getElementById('capModal').classList.remove('show');}
 function goHome(){
   switchScreen('home');
 }

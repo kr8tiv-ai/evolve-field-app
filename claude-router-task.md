@@ -135,6 +135,13 @@ The receipt photo is the source of truth; the rep's typed entry is a fallible hu
   silently propagate an error - always reconcile to the photo and record what you corrected.
 - **Classify every purchase** into a consistent category + canonical vendor (use/extend the Vendors tab:
   raw name -> canonical). Consistent naming is what makes trends possible.
+- **Decode cryptic material codes from the photo - research them when needed.** Receipts list materials as
+  a SKU / part-number + a mangled abbreviation ("REC GLS MED 40#", "NOZ-1/4-TC", "10038923"). OCR the CODE
+  as well as the description. When the printed description is poor or ambiguous, **web-search the SKU /
+  part number + the vendor name** to identify what the item actually is, then file the RESOLVED real product
+  name into Price Log + Receipt Log, keeping the raw code in Notes. The code is the durable key: match it to
+  the same canonical product across receipts so price history stays clean even when the printed description
+  is garbage. If you genuinely cannot resolve it, file your best guess and flag it in the Issue column.
 - **Learn what we buy, where, and for how much over time.** Push each tracked item's unit price into Price
   Log; let Price Watch hold the running history; raise a Money/Sourcing insight when a price moves
   materially, a cheaper source appears, or buying patterns shift ("media spend +30% MoM", "now buying

@@ -187,6 +187,7 @@ The Ops Workbook is the irreplaceable structured database for the whole business
 | [`AutoServer.gs`](AutoServer.gs) | The server-side autonomy layer: time-driven digests, sweeps, reply-monitor, the **Business Brain** (insights + spend + feedback learning), and the optional Gemini OCR/narrative |
 | [`Backups.gs`](Backups.gs) | The 3-day, accident-proof workbook backup system |
 | [`ReceiptOps.gs`](ReceiptOps.gs) | Router-health alerting + the QuickBooks-ready 📒 Receipt Log and a 3-day receipt-discrepancy report |
+| [`FeedHistory.gs`](FeedHistory.gs) | Total-recall capture feed — `apiCaptureHistory` (paginated, full per-capture detail) for the tappable "Just Captured" view |
 | [`Index.html`](Index.html) | The entire branded capture app (UI + logic, runs in a built-in demo mode if opened directly) |
 | [`appsscript.json`](appsscript.json) | Project manifest (OAuth scopes + web-app settings) |
 | [`claude-router-task.md`](claude-router-task.md) | The scheduled Claude agent's playbook — column maps, quoting steps, audit rules |
