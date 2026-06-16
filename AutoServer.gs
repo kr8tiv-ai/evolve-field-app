@@ -262,7 +262,7 @@ function EV_heartbeatsOn_(yyyymmdd) {
     var ts = vals[i][0], msg = String(vals[i][2] || '');
     if (!ts) continue;
     var key = (Object.prototype.toString.call(ts) === '[object Date]') ? EV_fmt_(ts, 'yyyyMMdd') : EV_fmt_(EV_parseDate_(ts) || new Date(0), 'yyyyMMdd');
-    if (key === yyyymmdd && /heartbeat/i.test(msg)) n++;
+    if (key === yyyymmdd && /Dispatch sweep/i.test(msg)) n++;
   }
   return n;
 }
@@ -366,6 +366,12 @@ function EV_buildMorningDigestHtml_() {
   sh.push('App Inbox needing a human: ' + (openInbox ? openInbox + ' (' + inbox.map(function (x) { return EV_esc_(x.status) + (x.ageH != null ? ' ' + x.ageH + 'h' : ''); }).join(', ') + ')' : 'none — clean.'));
   H.push(EV_card_('🩺 SYSTEM HEALTH', '<ul style="margin:0;padding-left:18px;font-size:14px;">' + sh.map(function (x) { return '<li style="margin:3px 0;">' + x + '</li>'; }).join('') + '</ul>'));
 
+  // ----- BUSINESS BRAIN + YESTERDAY RECAP + WHAT WE SHIPPED (each returns '' if no data) -----
+  H.push(EV_brainCard_());
+  H.push(EV_capturedCard_());
+  H.push(EV_activityCard_());
+  H.push(EV_upgradesCard_());
+
   // ----- WEATHER -----
   if (wx && wx.length) {
     var wrows = wx.map(function (d) {
@@ -375,14 +381,8 @@ function EV_buildMorningDigestHtml_() {
     H.push(EV_card_('🌤️ WEATHER — EDMONTON 5-DAY', '<table style="border-collapse:collapse;font-size:13px;width:100%;">' + wrows + '</table><div style="font-size:12px;color:#555;margin-top:6px;">Abrasive blasting is outdoor wet-process work; rain, high wind, and cold are scheduling risks.</div>'));
   }
 
-  // ----- TODAY & THIS WEEK -----
-  if (jobs.length) {
-    var jrows = jobs.map(function (j) {
-      var money = 'Deposit ' + (j.deposit ? '✔' : '—') + ' · Invoiced ' + (j.invoiced ? '✔' : '—') + ' · Paid ' + (j.paid ? '✔' : '—');
-      return '<div style="padding:8px 0;border-bottom:1px solid #eee;"><div style="font-weight:bold;">' + EV_esc_(j.customer) + ' <span style="font-weight:normal;color:#555;">— ' + EV_esc_(j.status) + '</span></div><div style="font-size:13px;color:#444;">' + EV_esc_(j.week) + ' · ' + EV_esc_(j.date) + ' · ' + EV_esc_(j.address) + ' · ' + EV_esc_(j.quote) + '</div><div style="font-size:12px;color:#666;">' + money + '</div></div>';
-    }).join('');
-    H.push(EV_card_('📅 TODAY &amp; THIS WEEK', jrows));
-  }
+  // ----- JOBS ON THE BOARD (richer per-job detail) -----
+  H.push(EV_jobsCard_(jobs));
 
   // ----- NEEDS FOLLOW-THROUGH -----
   var ft = [];
@@ -410,15 +410,8 @@ function EV_buildMorningDigestHtml_() {
     H.push(EV_card_('🧾 QUOTES OUT', '<ul style="margin:0;padding-left:18px;font-size:14px;">' + qrows + '</ul>'));
   }
 
-  // ----- PRIORITIES -----
-  if (todos.length) {
-    var order = { high: 0, medium: 1, low: 2 };
-    var sorted = todos.slice().sort(function (a, b) { return (order[a.priority.toLowerCase()] || 1) - (order[b.priority.toLowerCase()] || 1); });
-    var prows = sorted.slice(0, 5).map(function (t) {
-      return '<li style="margin:3px 0;"><b>[' + EV_esc_(t.priority || '—') + ']</b> ' + EV_esc_(t.task) + ' <span style="color:#666;">(' + EV_esc_(t.category) + ')</span></li>';
-    }).join('');
-    H.push(EV_card_('⭐ TOP PRIORITIES', '<ul style="margin:0;padding-left:18px;font-size:14px;">' + prows + '</ul>'));
-  }
+  // ----- TO-DO (richer: due dates, overdue flags, more items) -----
+  H.push(EV_todoCard_(todos));
 
   H.push('<div style="font-size:12px;color:#667;background:#f4f7f5;border-radius:8px;padding:10px 12px;margin-top:14px;">Reply to this email with anything to add, change, or mark done — it gets logged to the workbook automatically within the hour. Sent server-side by Evolve Autopilot; it goes out whether or not any computer is on.</div>');
   H.push('</div></div>');
@@ -429,6 +422,171 @@ function EV_card_(title, inner, bg, accent) {
   bg = bg || '#ffffff'; accent = accent || '#0b3d2e';
   return '<div style="margin:12px 0;border-left:4px solid ' + accent + ';background:' + bg + ';border-radius:6px;padding:10px 14px;">' +
     '<div style="font-size:13px;font-weight:bold;color:' + accent + ';margin-bottom:6px;letter-spacing:.4px;">' + title + '</div>' + inner + '</div>';
+}
+
+/* ===== richer-digest helpers (each returns '' on no data / error so the email never breaks) ===== */
+function EV_insightsForDigest_(n) {
+  try {
+    var book = SpreadsheetApp.openById(EV_FILER_SS_ID);
+    var sh = EV_sheetEndingWith_(book, 'Insights'); if (!sh) return [];
+    var v = sh.getDataRange().getValues(), out = [];
+    for (var i = 1; i < v.length; i++) {
+      var title = String(v[i][3] || ''), imp = String(v[i][6] || '').toLowerCase();
+      if (!title || imp.indexOf('not') >= 0) continue;
+      out.push({ title: title, detail: String(v[i][4] || ''), score: Number(v[i][5]) || 0 });
+    }
+    out.sort(function (a, b) { return b.score - a.score; });
+    return out.slice(0, n || 5);
+  } catch (e) { return []; }
+}
+function EV_brainCard_() {
+  try {
+    var ins = EV_insightsForDigest_(5); if (!ins.length) return '';
+    var li = ins.map(function (x) { return '<li style="margin:4px 0;"><b>' + EV_esc_(x.title) + '</b>' + (x.detail ? (' <span style="color:#555;">— ' + EV_esc_(x.detail) + '</span>') : '') + '</li>'; }).join('');
+    return EV_card_('🧠 BUSINESS BRAIN — WHAT THE NUMBERS SAY', '<ul style="margin:0;padding-left:18px;font-size:14px;">' + li + '</ul>', '#eef4ff', '#1558d6');
+  } catch (e) { return ''; }
+}
+function EV_capturedYesterday_() {
+  try {
+    var sh = EV_sheet_(EV.SHEETS.inbox); if (!sh) return null;
+    var v = sh.getDataRange().getValues(); if (v.length < 2) return null;
+    var yKey = EV_fmt_(new Date(EV_now_().getTime() - 86400000), 'yyyyMMdd');
+    var byCat = {}, people = {}, total = 0;
+    for (var i = 1; i < v.length; i++) {
+      var ts = EV_parseDate_(v[i][0]); if (!ts || EV_fmt_(ts, 'yyyyMMdd') !== yKey) continue;
+      var cat = String(v[i][2] || 'Other'); byCat[cat] = (byCat[cat] || 0) + 1; total++;
+      var by = String(v[i][1] || ''); if (by) people[by] = (people[by] || 0) + 1;
+    }
+    return total ? { total: total, byCat: byCat, people: people } : null;
+  } catch (e) { return null; }
+}
+function EV_capturedCard_() {
+  try {
+    var c = EV_capturedYesterday_(); if (!c) return '';
+    var cats = Object.keys(c.byCat).map(function (k) { return EV_esc_(k) + ' ×' + c.byCat[k]; }).join(' · ');
+    var ppl = Object.keys(c.people).map(function (k) { return EV_esc_(k) + ' (' + c.people[k] + ')'; }).join(', ');
+    return EV_card_('🆕 CAPTURED YESTERDAY', '<div style="font-size:14px;"><b>' + c.total + '</b> capture' + (c.total > 1 ? 's' : '') + ' from the field — ' + cats + (ppl ? ('<div style="color:#555;margin-top:4px;">By: ' + ppl + '</div>') : '') + '</div>');
+  } catch (e) { return ''; }
+}
+function EV_activityYesterday_() {
+  try {
+    var sh = EV_sheet_(EV.SHEETS.log); if (!sh) return null;
+    var lr = sh.getLastRow(); if (lr < 1) return null;
+    var v = sh.getRange(1, 1, lr, 3).getValues();
+    var yKey = EV_fmt_(new Date(EV_now_().getTime() - 86400000), 'yyyyMMdd');
+    var a = { filed: 0, reviewed: 0, backups: 0, insights: 0, replies: 0, sweeps: 0 };
+    for (var i = 0; i < v.length; i++) {
+      var ts = v[i][0]; if (!ts) continue;
+      var key = (Object.prototype.toString.call(ts) === '[object Date]') ? EV_fmt_(ts, 'yyyyMMdd') : EV_fmt_(EV_parseDate_(ts) || new Date(0), 'yyyyMMdd');
+      if (key !== yKey) continue;
+      var msg = String(v[i][2] || '');
+      var m = msg.match(/Inbox filer ran:\s*(\d+)\s*filed,\s*(\d+)\s*needs-review/i);
+      if (m) { a.filed += +m[1]; a.reviewed += +m[2]; }
+      if (/backup/i.test(msg)) a.backups++;
+      if (/Insights refreshed/i.test(msg)) a.insights++;
+      if (/repl(y|ies)|from reply/i.test(msg)) a.replies++;
+      if (/Dispatch sweep/i.test(msg)) a.sweeps++;
+    }
+    return a;
+  } catch (e) { return null; }
+}
+function EV_activityCard_() {
+  try {
+    var a = EV_activityYesterday_(); if (!a) return '';
+    var bits = [];
+    if (a.filed) bits.push(a.filed + ' receipt' + (a.filed > 1 ? 's' : '') + ' auto-filed');
+    if (a.reviewed) bits.push(a.reviewed + ' flagged for review');
+    if (a.replies) bits.push(a.replies + ' item' + (a.replies > 1 ? 's' : '') + ' logged from email replies');
+    if (a.insights) bits.push('insights refreshed ' + a.insights + '×');
+    if (a.backups) bits.push('backup taken');
+    if (a.sweeps) bits.push(a.sweeps + ' dispatch sweep' + (a.sweeps > 1 ? 's' : ''));
+    if (!bits.length) return '';
+    return EV_card_('🤖 YESTERDAY ON AUTOPILOT', '<div style="font-size:14px;">' + bits.join(' · ') + '.</div><div style="font-size:12px;color:#667;margin-top:4px;">All handled server-side — no PC needed.</div>');
+  } catch (e) { return ''; }
+}
+function EV_changelogForDigest_(days) {
+  // Built-in recent-ships list (shown until/unless the 🚀 Changelog tab is populated, so the
+  // "what we shipped" section always has content). Future ships call EV_logChange_ to add rows.
+  var seed = [
+    { date: '2026-06-16', title: 'Free receipt OCR auto-fill', detail: 'Snap a receipt, tap Auto-fill — reads vendor / date / total for free (Google Drive OCR with an on-device fallback so it works even when Google is busy).' },
+    { date: '2026-06-16', title: 'Richer morning email', detail: 'This digest now carries business-brain insights, what shipped, yesterday’s activity recap, and far more job + to-do detail.' },
+    { date: '2026-06-16', title: 'Receipts mirrored to the QuickBooks-ready Receipt Log', detail: 'Every auto-filed receipt now also lands in the 📒 Receipt Log ledger for clean bookkeeping/export.' },
+    { date: '2026-06-16', title: 'Smarter receipt reading', detail: 'Totals no longer mistake a line-item price for the total; dates normalize to one format; bad dates are left blank instead of faked.' },
+    { date: '2026-06-16', title: 'Tap-to-recall capture feed', detail: 'The "Just Captured" feed lets you tap any entry to see exactly what was sent and scroll back through everything.' },
+    { date: '2026-06-15', title: '3-day automatic backups', detail: 'The whole workbook is copied every 3 days to a locked Drive folder and never deleted.' },
+    { date: '2026-06-15', title: 'Spend brain + insights', detail: 'Daily spend intelligence — month-vs-month, top vendor, biggest category, largest expense, new-vendor pricing flags.' },
+    { date: '2026-06-08', title: 'Field App launched', detail: 'Crew can capture receipts, jobs, leads and quotes from any phone — Claude files each into the workbook.' }
+  ];
+  try {
+    var book = SpreadsheetApp.openById(EV_FILER_SS_ID);
+    var sh = EV_sheetEndingWith_(book, 'Changelog'); if (!sh) return seed;
+    var v = sh.getDataRange().getValues(), out = [];
+    var cutoff = new Date(EV_now_().getTime() - (days || 14) * 86400000);
+    for (var i = 1; i < v.length; i++) {
+      if (!v[i][1]) continue;
+      var d = EV_parseDate_(v[i][0]);
+      if (d && d.getTime() < cutoff.getTime()) continue;
+      out.push({ date: v[i][0], title: v[i][1], detail: v[i][2] });
+    }
+    return out.length ? out.reverse().slice(0, 8) : seed;
+  } catch (e) { return seed; }
+}
+function EV_upgradesCard_() {
+  try {
+    var ch = EV_changelogForDigest_(14); if (!ch.length) return '';
+    var li = ch.map(function (x) { return '<li style="margin:4px 0;"><b>' + EV_esc_(x.title) + '</b> <span style="color:#777;">(' + EV_esc_(String(x.date)) + ')</span>' + (x.detail ? ('<div style="color:#555;font-size:13px;">' + EV_esc_(x.detail) + '</div>') : '') + '</li>'; }).join('');
+    return EV_card_('🚀 RECENT UPGRADES — WHAT WE SHIPPED', '<ul style="margin:0;padding-left:18px;font-size:14px;">' + li + '</ul>', '#f2fff2', '#1a7f37');
+  } catch (e) { return ''; }
+}
+function EV_jobsCard_(jobs) {
+  try {
+    if (!jobs.length) return '';
+    var rows = jobs.map(function (j) {
+      var money = 'Deposit ' + (j.deposit ? '✔' : '—') + ' · Invoiced ' + (j.invoiced ? '✔' : '—') + ' · Paid ' + (j.paid ? '✔' : '—');
+      var l2 = [j.week, j.date, j.time].filter(String).join(' · ');
+      var l3 = [j.address, j.crew ? ('crew: ' + j.crew) : '', j.quote].filter(String).join(' · ');
+      return '<div style="padding:8px 0;border-bottom:1px solid #eee;">' +
+        '<div style="font-weight:bold;">' + EV_esc_(j.customer) + ' <span style="font-weight:normal;color:#555;">— ' + EV_esc_(j.status || '') + '</span></div>' +
+        (l2 ? '<div style="font-size:13px;color:#444;">' + EV_esc_(l2) + '</div>' : '') +
+        (l3 ? '<div style="font-size:13px;color:#444;">' + EV_esc_(l3) + '</div>' : '') +
+        (j.notes ? '<div style="font-size:12px;color:#666;">' + EV_esc_(j.notes) + '</div>' : '') +
+        '<div style="font-size:12px;color:#666;">' + money + '</div></div>';
+    }).join('');
+    return EV_card_('📅 JOBS ON THE BOARD (' + jobs.length + ')', rows);
+  } catch (e) { return ''; }
+}
+function EV_todoCard_(todos) {
+  try {
+    if (!todos.length) return '';
+    var order = { high: 0, medium: 1, low: 2 };
+    var sorted = todos.slice().sort(function (a, b) { var oa = order[(a.priority || '').toLowerCase()], ob = order[(b.priority || '').toLowerCase()]; return (oa == null ? 1 : oa) - (ob == null ? 1 : ob); });
+    var rows = sorted.slice(0, 10).map(function (t) {
+      var od = EV_isPast_(EV_parseDate_(t.due));
+      var due = t.due ? (' <span style="color:' + (od ? '#b3261e' : '#666') + ';">' + (od ? 'OVERDUE ' : 'due ') + EV_esc_(String(t.due)) + '</span>') : '';
+      return '<li style="margin:4px 0;">' + (od ? '<b style="color:#b3261e;">! </b>' : '') + '<b>[' + EV_esc_(t.priority || '—') + ']</b> ' + EV_esc_(t.task) + ' <span style="color:#888;">(' + EV_esc_(t.category) + ')</span>' + due + '</li>';
+    }).join('');
+    var more = todos.length > 10 ? ('<div style="font-size:12px;color:#667;margin-top:6px;">+' + (todos.length - 10) + ' more on the To-Do tab.</div>') : '';
+    return EV_card_('⭐ TO-DO — TOP ' + Math.min(10, todos.length) + ' OF ' + todos.length, '<ul style="margin:0;padding-left:18px;font-size:14px;">' + rows + '</ul>' + more);
+  } catch (e) { return ''; }
+}
+/* Append a line to the 🚀 Changelog tab so "RECENT UPGRADES" can surface it. */
+function EV_logChange_(title, detail) {
+  try {
+    var book = SpreadsheetApp.openById(EV_FILER_SS_ID);
+    var sh = EV_sheetEndingWith_(book, 'Changelog');
+    if (!sh) { sh = book.insertSheet('🚀 Changelog'); sh.appendRow(['Date', 'What shipped', 'Detail']); sh.getRange(1, 1, 1, 3).setFontWeight('bold'); }
+    sh.appendRow([EV_fmt_(EV_now_(), 'yyyy-MM-dd'), String(title || ''), String(detail || '')]);
+    return 'logged';
+  } catch (e) { return 'err ' + e; }
+}
+/* Build the digest HTML WITHOUT sending — run from the editor to verify it renders. */
+function EV_previewDigest() {
+  var h = EV_buildMorningDigestHtml_();
+  Logger.log('Digest built OK — ' + h.length + ' chars. Cards: ' +
+    ['brain', 'captured', 'autopilot', 'upgrades'].filter(function (k) {
+      return ({ brain: EV_brainCard_(), captured: EV_capturedCard_(), autopilot: EV_activityCard_(), upgrades: EV_upgradesCard_() }[k]) !== '';
+    }).join(', '));
+  return h.length;
 }
 
 // ---------------------------------------------------------------------------
@@ -590,7 +748,7 @@ function EV_personalDigest() {
     if (threads.length) {
       var newest = threads[0];
       var dmsgs = newest.getMessages();
-      // master from the most recent message we (the owner) sent
+      // master from the most recent message we (manager) sent
       for (var i = dmsgs.length - 1; i >= 0; i--) {
         if (/manager@yourcompany\.com/i.test(dmsgs[i].getFrom())) { master = EV_listFromHtml_(dmsgs[i].getBody()); break; }
       }
@@ -763,12 +921,31 @@ function EV_colIndex_(header, name){
   return -1;
 }
 
+/* Neutralize spreadsheet / CSV formula injection from crew- or router-supplied strings,
+   so a vendor typed as "=HYPERLINK(...)" can't become a live formula in the master DB or
+   execute on QuickBooks/CSV import. Numbers and Dates pass through untouched. */
+function EV_safeCell_(v){
+  if (typeof v === 'string' && /^[=+\-@\t\r]/.test(v)) return "'" + v;
+  return v;
+}
+
 function EV_findAmount_(details){
-  var keys=Object.keys(details||{});
-  for(var i=0;i<keys.length;i++){
-    if(/amount|total|cost|price|spent|paid|sum/i.test(keys[i])){
-      var n=parseFloat(String(details[keys[i]]).replace(/[^0-9.-]/g,''));
+  details=details||{};
+  // Priority-ordered: the receipt TOTAL must win over line-item unit/qty/cost/gst.
+  var pref=['total','grandTotal','grand_total','amount','amountDue','amount_due','balanceDue','balance_due','paid','spent'];
+  for(var i=0;i<pref.length;i++){
+    var k=pref[i];
+    if(details[k]!=null && String(details[k]).trim()!==''){
+      var n=parseFloat(String(details[k]).replace(/[^0-9.\-]/g,''));
       if(!isNaN(n)) return n;
+    }
+  }
+  // Fuzzy fallback: only a key that *names* total/amount, never unit/qty/sub/gst/tax/cost/price.
+  var keys=Object.keys(details);
+  for(var j=0;j<keys.length;j++){
+    if(/total|amount/i.test(keys[j]) && !/unit|qty|quantity|sub|gst|hst|tax/i.test(keys[j])){
+      var n2=parseFloat(String(details[keys[j]]).replace(/[^0-9.\-]/g,''));
+      if(!isNaN(n2)) return n2;
     }
   }
   return '';
@@ -813,7 +990,7 @@ function EV_fileExpense_(book, irow, ih, details, photo, sub){
   }
   if(target<0){ exp.insertRowBefore(footer); target=footer; }
   var rowArr=new Array(lastCol).fill('');
-  function put(name,val){ var k=gi(name); if(k>=0) rowArr[k]=val; }
+  function put(name,val){ var k=gi(name); if(k>=0) rowArr[k]=EV_safeCell_(val); }
   var by=irow[EV_colIndex_(ih,'Captured')];
   var summary=irow[EV_colIndex_(ih,'Summary')];
   put('Date', EV_toDate_(irow[0]));
@@ -827,6 +1004,34 @@ function EV_fileExpense_(book, irow, ih, details, photo, sub){
   put('Total', EV_findAmount_(details));
   put('Description', String(summary||'')+' | SubID:'+sub+(photo?(' | Photo:'+photo):'')+' | auto-filed '+EV_fmtNow_());
   exp.getRange(target,1,1,lastCol).setValues([rowArr]);
+
+  // Mirror into the QuickBooks-ready 📒 Receipt Log (ledger of record). Best-effort — a
+  // failure here must NOT block the Expenses filing above. The scheduled router verifies
+  // totals/dates against the photo and fills the Issue/discrepancy column on its run.
+  try {
+    var rl = EV_sheetEndingWith_(book, 'Receipt Log');
+    if (rl) {
+      rl.appendRow([
+        EV_toDate_(irow[0]),                                                       // Date
+        EV_safeCell_(details.vendor||details.where||details.store||''),            // Vendor
+        EV_safeCell_(details.category||details.about||'Field App'),                // Category
+        '',                                                                        // Subtotal (router fills)
+        EV_safeCell_(details.gst||details.tax||''),                                // GST/Tax
+        EV_findAmount_(details),                                                   // Total
+        EV_safeCell_(details.payment||details.method||details.paidWith||''),       // Payment method
+        EV_safeCell_(details.item||details.what||details.purchased||summary||''),  // Line items
+        EV_safeCell_(details.qty||details.quantity||''),                           // Qty
+        EV_safeCell_(details.unit||details.unitCost||''),                          // Unit price
+        EV_safeCell_(details.job||details.reference||details.why||details.notes||''),// Job/reason
+        sub,                                                                       // Source (Inbox ID)
+        EV_safeCell_(String(photo||'').split('\n')[0].replace(/^[^:]+:\s*/,'')),   // Photo link (first, de-tagged)
+        EV_safeCell_(by||''),                                                      // Filed by
+        '',                                                                        // Issue/discrepancy (router fills)
+        EV_fmtNow_()                                                               // Created
+      ]);
+    }
+  } catch (_rl) { try { appLog_('Receipt','Receipt Log mirror failed for '+sub+': '+_rl); } catch(_e){} }
+
   return exp.getName()+'!row'+target;
 }
 function EV_fileInbox_(){
@@ -881,6 +1086,7 @@ function EV_toDate_(v){
   if (v instanceof Date) return v;
   if (typeof v === "number") return new Date(v);
   var s = String(v||"").trim();
+  if (!s) return '';
   var parts = s.split(" ");
   var dmy = (parts[0]||"").split("/");
   if (dmy.length === 3 && dmy[2].length === 4) {
@@ -888,7 +1094,7 @@ function EV_toDate_(v){
     return new Date(Number(dmy[2]), Number(dmy[1])-1, Number(dmy[0]), Number(hms[0]||0), Number(hms[1]||0), Number(hms[2]||0));
   }
   var d = new Date(s);
-  return isNaN(d.getTime()) ? new Date() : d;
+  return isNaN(d.getTime()) ? '' : d;  // blank, never a fabricated "today", for the tax ledger
 }
 
 

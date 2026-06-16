@@ -188,7 +188,7 @@ The Ops Workbook is the irreplaceable structured database for the whole business
 | [`Backups.gs`](Backups.gs) | The 3-day, accident-proof workbook backup system |
 | [`ReceiptOps.gs`](ReceiptOps.gs) | Router-health alerting + the QuickBooks-ready 📒 Receipt Log and a 3-day receipt-discrepancy report |
 | [`FeedHistory.gs`](FeedHistory.gs) | Total-recall capture feed — `apiCaptureHistory` (paginated, full per-capture detail) for the tappable "Just Captured" view |
-| [`OcrFill.gs`](OcrFill.gs) | Free receipt OCR auto-fill — `apiOcrReceipt` reads a receipt photo with Google Drive's **own** native OCR (no paid API, no key — uses the script's existing Drive scope) and pre-fills date/vendor/total for the rep to confirm |
+| [`OcrFill.gs`](OcrFill.gs) | Free receipt OCR auto-fill — `apiOcrReceipt` reads a receipt with Google Drive's **own** native OCR (no paid API/key, uses the existing Drive scope); when Drive OCR is rate-limited the app falls back to **on-device Tesseract.js** (`apiParseReceiptText` parses that text), so the button works either way. Pre-fills date/vendor/total for the rep to confirm |
 | [`Index.html`](Index.html) | The entire branded capture app (UI + logic, runs in a built-in demo mode if opened directly) |
 | [`appsscript.json`](appsscript.json) | Project manifest (OAuth scopes + web-app settings) |
 | [`claude-router-task.md`](claude-router-task.md) | The scheduled Claude agent's playbook — column maps, quoting steps, audit rules |

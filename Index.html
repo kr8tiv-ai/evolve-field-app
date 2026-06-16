@@ -920,21 +920,83 @@ function renderThumbs(key){
   });
 }
 function rmPhoto(key,i){if(S.photos[key]){S.photos[key].splice(i,1);renderThumbs(key);}}
-/* ===== free OCR auto-fill: read the receipt photo and pre-fill date/vendor/total ===== */
+/* ===== free OCR auto-fill: read the receipt photo and pre-fill date/vendor/total =====
+   Two free engines, no API key: (1) Google Drive's native OCR (fast + accurate, but a
+   low shared rate limit); (2) on-device Tesseract.js (no quota, no key) as the fallback
+   so the button still works when Drive OCR is busy. We always re-encode the photo to a
+   downscaled JPEG first — that also converts iPhone HEIC / WEBP that Drive OCR can't
+   read. The full-res original is still kept for the saved receipt record. */
+var _tessLoad;
+function setOcrBtn(b,busy,txt){ if(!b)return; b.disabled=!!busy; b.textContent=txt||'✨ Auto-fill from photo'; }
+function ocrApply(fl){
+  fl=fl||{}; var got=[], miss=[];
+  function set(id,v){ var el=document.getElementById(id); if(el){el.value=v;return true;} return false; }
+  if(fl.date&&/^\d{4}-\d{2}-\d{2}$/.test(fl.date)){ if(set('f_date',fl.date))got.push('date'); } else if(fl.date){ miss.push('date'); }
+  if(fl.vendor){ if(set('f_vendor',fl.vendor))got.push('vendor'); }
+  if(fl.total){ if(set('f_total',fl.total))got.push('total'); }
+  if(got.length) toast('Filled '+got.join(', ')+' — please check it against the receipt'+(miss.length?'. Add the '+miss.join(', ')+' yourself':''));
+  else toast('Read the receipt but couldn\'t pick the fields — type them in.',true);
+  return got.length;
+}
+function ocrToJpeg(p){
+  return new Promise(function(resolve){
+    try{
+      var img=new Image();
+      img.onload=function(){
+        try{
+          var max=2200,w=img.width,h=img.height;
+          if(w>max||h>max){ if(w>h){h=Math.round(h*max/w);w=max;}else{w=Math.round(w*max/h);h=max;} }
+          var c=document.createElement('canvas');c.width=w;c.height=h;
+          c.getContext('2d').drawImage(img,0,0,w,h);
+          resolve(c.toDataURL('image/jpeg',0.85));
+        }catch(e){ resolve(p.dataUrl); }
+      };
+      img.onerror=function(){ resolve(p.dataUrl); };
+      img.src=p.dataUrl;
+    }catch(e){ resolve(p.dataUrl); }
+  });
+}
+function loadTesseract(){
+  if(window.Tesseract) return Promise.resolve();
+  if(_tessLoad) return _tessLoad;
+  _tessLoad=new Promise(function(resolve,reject){
+    var s=document.createElement('script');
+    s.src='https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js';
+    s.onload=function(){ window.Tesseract?resolve():reject(new Error('no Tesseract')); };
+    s.onerror=function(){ reject(new Error('load failed')); };
+    document.head.appendChild(s);
+  });
+  return _tessLoad;
+}
+function ocrOnDevice(jpeg,btn){
+  setOcrBtn(btn,true,'✨ Reading on device…');
+  toast('Quick-read is busy — reading the photo on your device (one moment)…');
+  loadTesseract().then(function(){
+    return Tesseract.recognize(jpeg,'eng');
+  }).then(function(r){
+    var text=(r&&r.data&&r.data.text)||'';
+    if(!text.trim()){ setOcrBtn(btn,false); toast('Couldn\'t read it automatically — type it in (the photo is saved).',true); return; }
+    call('apiParseReceiptText',[S.token,text],function(res){
+      setOcrBtn(btn,false);
+      if(res&&res.ok){ ocrApply(res.fields); } else { toast('Read the text but couldn\'t pick fields — type them in.',true); }
+    },function(){ setOcrBtn(btn,false); toast('Couldn\'t finish reading — type it in (the photo is saved).',true); });
+  }).catch(function(){
+    setOcrBtn(btn,false);
+    toast('Auto-read is unavailable right now — type it in. The photo is saved and the system will also read it.',true);
+  });
+}
 function ocrAutoFill(key){
   var pics=S.photos[key]||[];
-  if(!pics.length){toast('Snap the receipt photo first',true);return;}
-  var p=pics[0];var btn=document.getElementById('ocrBtn');
-  if(btn){btn.disabled=true;btn.textContent='✨ Reading receipt…';}
-  call('apiOcrReceipt',[S.token,{mimeType:p.mimeType,data:p.data}],function(res){
-    if(btn){btn.disabled=false;btn.textContent='✨ Auto-fill from photo';}
-    if(!res||!res.ok){toast((res&&res.error)||'Could not read that photo — type it in',true);return;}
-    var fl=res.fields||{},got=[];
-    if(fl.date&&/^\d{4}-\d{2}-\d{2}$/.test(fl.date)&&document.getElementById('f_date')){document.getElementById('f_date').value=fl.date;got.push('date');}
-    if(fl.vendor&&document.getElementById('f_vendor')){document.getElementById('f_vendor').value=fl.vendor;got.push('vendor');}
-    if(fl.total&&document.getElementById('f_total')){document.getElementById('f_total').value=fl.total;got.push('total');}
-    toast(got.length?('Filled '+got.join(', ')+' — verify against the receipt'):'Couldn\'t pick out the fields — type them in',!got.length);
-  },function(e){if(btn){btn.disabled=false;btn.textContent='✨ Auto-fill from photo';}toast(String(e&&e.message||e),true);});
+  if(!pics.length){ toast('Snap the receipt photo first',true); return; }
+  var p=pics[0], btn=document.getElementById('ocrBtn');
+  setOcrBtn(btn,true,'✨ Reading receipt…');
+  ocrToJpeg(p).then(function(jpeg){
+    var b64=(jpeg.indexOf(',')>-1?jpeg.split(',')[1]:jpeg);
+    call('apiOcrReceipt',[S.token,{mimeType:'image/jpeg',data:b64}],function(res){
+      if(res&&res.ok&&res.fields){ setOcrBtn(btn,false); ocrApply(res.fields); return; }
+      ocrOnDevice(jpeg,btn);   // rate-limited / unsupported / empty -> on-device
+    },function(){ ocrOnDevice(jpeg,btn); });
+  });
 }
 
 /* ================= submit ========= */
