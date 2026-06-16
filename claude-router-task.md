@@ -77,6 +77,34 @@ Column letters are exact. `startCol` = the column letter of the first value you 
 Also: if itâ€™s a *materials* purchase, additionally append to **Price Log** (below) and let
 the audit refresh Price Watch.
 
+**RECEIPT VERIFICATION & BOOKKEEPING - the receipt is the SOURCE OF TRUTH (2026-06-15).**
+Every receipt photo is already stored in Drive and is NEVER deleted. For every `receipt` (and any
+`quick`/`pricelog` capture that is really a receipt):
+1. **OCR the photo and read it as the source of truth.** Extract: date, vendor, every line item
+   (description, qty, unit price, line total), subtotal, GST/tax, total, and payment method.
+2. **Verify the typed input against the receipt.** The rep types a date/total/category in the app.
+   Compare them to what the receipt actually says. **The receipt always wins** - file the receipt's
+   values. Where a typed value disagrees (or the app date != the receipt date), still file per the
+   receipt and record the conflict in the Receipt Log "Issue / discrepancy" column, e.g.
+   "app date 06/14 vs receipt 06/13 - filed per receipt" or "typed $48.20 vs receipt $42.80".
+3. **Verify the math.** Sum of line items ~= subtotal; subtotal + GST ~= total. If they do not
+   reconcile, note it in the Issue column ("items sum $40 != total $45 - check").
+4. **File it three ways (append-only, never delete):**
+   - **`Receipt Log`** (the QuickBooks-ready ledger of record; setCol=1): one row per receipt with EVERY
+     field - `[ A Date(DATE:), B Vendor, C Category, D Subtotal, E GST/Tax, F Total, G Payment method,
+     H Line items (one per line: "qty x desc @unit = total"), I Qty(total NUM:), J Unit price(NUM:),
+     K Job/reason, L Source (Inbox ID), M Photo link, N Filed by(=capturedBy), O Issue/discrepancy,
+     P Created(DATE: today) ]`.
+   - **`Expenses`** (the financial ledger - mapping above).
+   - **`Price Log`** - one row PER tracked material/media line item, so per-unit price history is queryable.
+5. **Every item is data - do not summarize line items away.** Capture them in the Receipt Log "Line items"
+   column AND as Price Log rows for materials. This is what lets the books export to QuickBooks.
+6. The `Receipt Log` columns map directly to a QuickBooks expense/bill import (Date, Vendor/Payee,
+   Category/Account, Amount, Tax, Memo). Keep them clean and consistent.
+7. A server-side job (`EV_receiptReport`) emails Matt + Todd every 3 days listing any Receipt Log rows
+   whose "Issue / discrepancy" column is non-blank - so do NOT email per receipt; just populate that
+   column accurately and the 3-day digest handles the rest.
+
 **`pricelog` â†’ `Price Log`** (header 5, data 6+, `startCol=1`)
 `[ A Date(DATE:), B Supplier, C Product name, D Brand, E SKU, F Category, G Unit type,
    H Package size, I Qty(NUM:), J Unit price(NUM:), K Total paid(NUM:), L Invoice#, M Notes ]`
