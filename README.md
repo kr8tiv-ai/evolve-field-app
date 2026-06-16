@@ -188,6 +188,7 @@ The Ops Workbook is the irreplaceable structured database for the whole business
 | [`Backups.gs`](Backups.gs) | The 3-day, accident-proof workbook backup system |
 | [`ReceiptOps.gs`](ReceiptOps.gs) | Router-health alerting + the QuickBooks-ready 📒 Receipt Log and a 3-day receipt-discrepancy report |
 | [`FeedHistory.gs`](FeedHistory.gs) | Total-recall capture feed — `apiCaptureHistory` (paginated, full per-capture detail) for the tappable "Just Captured" view |
+| [`OcrFill.gs`](OcrFill.gs) | Free receipt OCR auto-fill — `apiOcrReceipt` reads a receipt photo with Google Drive's **own** native OCR (no paid API, no key — uses the script's existing Drive scope) and pre-fills date/vendor/total for the rep to confirm |
 | [`Index.html`](Index.html) | The entire branded capture app (UI + logic, runs in a built-in demo mode if opened directly) |
 | [`appsscript.json`](appsscript.json) | Project manifest (OAuth scopes + web-app settings) |
 | [`claude-router-task.md`](claude-router-task.md) | The scheduled Claude agent's playbook — column maps, quoting steps, audit rules |
@@ -209,7 +210,7 @@ The app and brains read/write a single Google Sheets "Ops Workbook." Crew captur
 
 Full guide in [`DEPLOY.md`](DEPLOY.md). In short:
 
-1. **Create an Apps Script project** on the account that owns the workbook; paste in `Code.gs`, `AutoServer.gs`, `Backups.gs`, the `Index` HTML file, and `appsscript.json`.
+1. **Create an Apps Script project** on the account that owns the workbook; paste in `Code.gs`, `AutoServer.gs`, `Backups.gs`, `ReceiptOps.gs`, `FeedHistory.gs`, `OcrFill.gs`, the `Index` HTML file, and `appsscript.json`.
 2. **Fill in your IDs** (spreadsheet + Drive folders) and run **`setup()`** — it creates the app tabs and prints your `ROUTER_SECRET`.
 3. **Deploy as a Web App** (execute as you, access "Anyone"). Open the `/exec` URL on a phone → *Add to Home Screen.*
 4. **Turn on the autonomy + brain:** run **`EV_installCore()`** (morning digest + 3× dispatch sweep with insight refresh — it also clears any older triggers), **`EV_installGmail()`** (hourly reply-monitor + personal digest), **`EV_setupBrain()`** (Insights/Feedback/Vendors tabs), and **`EV_installBackups()`** (3-day backups). The `setup()` authorization already grants every scope (incl. `gmail.modify`), so no extra re-auth is needed.

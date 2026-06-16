@@ -97,6 +97,14 @@ Every receipt photo is already stored in Drive and is NEVER deleted. For every `
    "app date 06/14 vs receipt 06/13 - filed per receipt" or "typed $48.20 vs receipt $42.80".
 3. **Verify the math.** Sum of line items ~= subtotal; subtotal + GST ~= total. If they do not
    reconcile, note it in the Issue column ("items sum $40 != total $45 - check").
+3b. **Catch DUPLICATE receipts (always).** Before filing, build a fingerprint = `canonicalVendor +
+   total + date` and check it against the existing 📒 Receipt Log AND Expenses. Treat near-matches as
+   duplicates too: same vendor (allow spelling/alias drift), total within +-$1, date within +-1 day,
+   and the same `Submission ID` is a hard duplicate (re-submitted photo). If it's a duplicate, DO NOT
+   create a second financial row — instead mark the Inbox row FILED with note "duplicate of <RCPT id /
+   Expenses row>", and write the fingerprint into the Issue column of the original. Surface a `Risk`
+   insight if a duplicate slipped into Expenses before you caught it. Goal: a vendor never gets paid /
+   counted twice because the same receipt was photographed twice.
 4. **File it three ways (append-only, never delete):**
    - **`Receipt Log`** (the QuickBooks-ready ledger of record; setCol=1): one row per receipt with EVERY
      field - `[ A Date(DATE:), B Vendor, C Category, D Subtotal, E GST/Tax, F Total, G Payment method,

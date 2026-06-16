@@ -417,6 +417,7 @@ footer{text-align:center;padding:30px 0 10px;color:var(--faint);font-size:.66rem
     offset=offset||0; var slice=all.slice(offset,offset+(limit||15));
     return {ok:true,items:slice,more:(offset+slice.length)<all.length,total:all.length};
   };
+  R.apiOcrReceipt=function(){return {ok:true,fields:{date:'2026-05-22',vendor:'Esso 7-ELEVEN 37836',total:'150.00',gst:'7.14'},chars:829};};
   R.apiAddUser=function(t,n){return {ok:true,message:n+' added (demo).'};};
   R.apiListUsers=function(){return {ok:true,users:[{name:'Todd',role:'admin',active:'Yes'},{name:'Matt',role:'admin',active:'Yes'},{name:'Jesse',role:'crew',active:'Yes'}]};};
   var scriptObj={}; Object.defineProperty(scriptObj,'run',{get:function(){return makeRunner();}});
@@ -848,6 +849,14 @@ function photoField(f){
   wrap.appendChild(zone);wrap.appendChild(inp);
   if(f.hint){var h=document.createElement('div');h.className='hint';h.textContent=f.hint;wrap.appendChild(h);}
   var th=document.createElement('div');th.className='thumbs';th.id='thumbs_'+f.k;wrap.appendChild(th);
+  if(S.cat&&S.cat.id==='receipt'&&f.k==='photo'){
+    var ob=document.createElement('button');ob.type='button';ob.id='ocrBtn';ob.textContent='✨ Auto-fill from photo';
+    ob.style.cssText='width:100%;margin-top:10px;padding:13px;border-radius:12px;border:1px solid #39ff14;background:rgba(57,255,20,.12);color:#39ff14;font-weight:700;font-size:15px;cursor:pointer;';
+    ob.onclick=function(){ocrAutoFill(f.k);};
+    wrap.appendChild(ob);
+    var oh=document.createElement('div');oh.className='hint';oh.textContent='Reads the receipt and fills date, vendor and total — always double-check against the photo.';
+    wrap.appendChild(oh);
+  }
   return wrap;
 }
 function locationField(){
@@ -911,6 +920,22 @@ function renderThumbs(key){
   });
 }
 function rmPhoto(key,i){if(S.photos[key]){S.photos[key].splice(i,1);renderThumbs(key);}}
+/* ===== free OCR auto-fill: read the receipt photo and pre-fill date/vendor/total ===== */
+function ocrAutoFill(key){
+  var pics=S.photos[key]||[];
+  if(!pics.length){toast('Snap the receipt photo first',true);return;}
+  var p=pics[0];var btn=document.getElementById('ocrBtn');
+  if(btn){btn.disabled=true;btn.textContent='✨ Reading receipt…';}
+  call('apiOcrReceipt',[S.token,{mimeType:p.mimeType,data:p.data}],function(res){
+    if(btn){btn.disabled=false;btn.textContent='✨ Auto-fill from photo';}
+    if(!res||!res.ok){toast((res&&res.error)||'Could not read that photo — type it in',true);return;}
+    var fl=res.fields||{},got=[];
+    if(fl.date&&/^\d{4}-\d{2}-\d{2}$/.test(fl.date)&&document.getElementById('f_date')){document.getElementById('f_date').value=fl.date;got.push('date');}
+    if(fl.vendor&&document.getElementById('f_vendor')){document.getElementById('f_vendor').value=fl.vendor;got.push('vendor');}
+    if(fl.total&&document.getElementById('f_total')){document.getElementById('f_total').value=fl.total;got.push('total');}
+    toast(got.length?('Filled '+got.join(', ')+' — verify against the receipt'):'Couldn\'t pick out the fields — type them in',!got.length);
+  },function(e){if(btn){btn.disabled=false;btn.textContent='✨ Auto-fill from photo';}toast(String(e&&e.message||e),true);});
+}
 
 /* ================= submit ========= */
 function collect(){
