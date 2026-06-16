@@ -126,6 +126,22 @@ GPS/location <-> job addresses <-> travel/fuel; weather <-> scheduling. Surface 
 Insights (via the `insight` action). Small patterns become valuable over time - never discard a
 datapoint as insignificant.
 
+### Receipt error-correction & purchasing intelligence (get this really right)
+The receipt photo is the source of truth; the rep's typed entry is a fallible human input. Each run:
+- **Catch + correct sloppy error on BOTH sides.** Compare the typed vendor/date/total/category against what
+  you OCR off the photo. If the TYPED value is wrong (fat-fingered total, wrong date/vendor), file the
+  receipt's value and note the fix in the Issue column ("typed $48.20 -> receipt $42.80"). If your OCR read
+  looks wrong vs a clear typed value or vs the line-item math, re-read the photo before trusting it. Never
+  silently propagate an error - always reconcile to the photo and record what you corrected.
+- **Classify every purchase** into a consistent category + canonical vendor (use/extend the Vendors tab:
+  raw name -> canonical). Consistent naming is what makes trends possible.
+- **Learn what we buy, where, and for how much over time.** Push each tracked item's unit price into Price
+  Log; let Price Watch hold the running history; raise a Money/Sourcing insight when a price moves
+  materially, a cheaper source appears, or buying patterns shift ("media spend +30% MoM", "now buying
+  nozzles from a 2nd vendor at +18%"). The goal is a buying brain that sharpens every month.
+- **Keep receipts visible.** Always keep the photo link on the filed Receipt Log row so a receipt is as
+  browsable as a job photo.
+
 **`pricelog` â†’ `Price Log`** (header 5, data 6+, `startCol=1`)
 `[ A Date(DATE:), B Supplier, C Product name, D Brand, E SKU, F Category, G Unit type,
    H Package size, I Qty(NUM:), J Unit price(NUM:), K Total paid(NUM:), L Invoice#, M Notes ]`
