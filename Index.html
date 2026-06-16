@@ -389,7 +389,8 @@ footer{text-align:center;padding:30px 0 10px;color:var(--faint);font-size:.66rem
 /* ================= category definitions ========= */
 var CATS=[
   {id:'receipt',ic:'🧾',label:'Receipt / Expense',sub:'Snap a receipt',blurb:'Snap the receipt — Claude reads the vendor, amount and date and files it under Expenses.',fields:[
-    {k:'photo',type:'photo',label:'Receipt photo',multi:true},
+    {k:'photo',type:'photo',label:'Receipt photo',multi:true,req:true},
+    {k:'date',label:'Date on the receipt',type:'date',hint:'Checked against the date printed on the receipt — the receipt always wins.'},
     {k:'vendor',label:'Vendor / where',type:'text',ph:'e.g. Consolidated Compressor'},
     {k:'total',label:'Total $',type:'money',req:true},
     {k:'what',label:'What was purchased',type:'text',ph:'e.g. Corn cob media, 40 lb'},
