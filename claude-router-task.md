@@ -80,6 +80,14 @@ the audit refresh Price Watch.
 **RECEIPT VERIFICATION & BOOKKEEPING - the receipt is the SOURCE OF TRUTH (2026-06-15).**
 Every receipt photo is already stored in Drive and is NEVER deleted. For every `receipt` (and any
 `quick`/`pricelog` capture that is really a receipt):
+
+> **IMPORTANT — backfill already-filed receipts.** A server-side auto-filer (`EV_fileInbox_`) writes
+> receipts to **Expenses** from the rep's *typed* fields and marks the Inbox row **FILED at submit**,
+> BEFORE any OCR. So `getNew` will NOT show them. Each run you MUST also `readTab` the **📥 App Inbox**
+> and, for every `receipt` row whose Filed To is `Expenses!...` that has **no matching 📒 Receipt Log
+> entry** (match on Submission ID, col N of the Inbox), do the full OCR + Receipt Log + verification +
+> jobs cross-reference below. The auto-file is just the fast financial stub; you add the real
+> intelligence on top. Reconcile (don't duplicate) the existing Expenses row.
 1. **OCR the photo and read it as the source of truth.** Extract: date, vendor, every line item
    (description, qty, unit price, line total), subtotal, GST/tax, total, and payment method.
 2. **Verify the typed input against the receipt.** The rep types a date/total/category in the app.
