@@ -592,6 +592,7 @@ window.addEventListener('DOMContentLoaded',function(){
   buildKeypad(); buildTiles();
   document.getElementById('loginName').addEventListener('change',checkLoginReady);
   document.getElementById('loginBtn').addEventListener('click',doLogin);
+  window.addEventListener('online',function(){ evFlushOutbox(); });
   loadConfig();
 });
 function loadConfig(){
@@ -698,6 +699,7 @@ function enterApp(){
   }
   maybeShowA2HS();
   loadFeed();
+  evBadge(); evFlushOutbox();   // send anything that was saved offline last time
 }
 function greeting(){var h=new Date().getHours();return h<12?'Good morning':h<17?'Good afternoon':'Good evening';}
 
@@ -1013,21 +1015,80 @@ function collect(){
   });
   return {fields:out,missing:missing};
 }
+/* ================= offline outbox — NEVER lose a capture =================
+   If the phone is offline, or the send fails (weak signal / server hiccup), the
+   whole capture (fields + photos + GPS) is saved to IndexedDB and auto-sent on
+   reconnect or next app open. A clientId makes the server idempotent so a retry
+   can't create a duplicate row. The crew never re-enters anything. */
+var EV_DB_, EV_flushing=false;
+function evIdb(cb){
+  if(EV_DB_)return cb(EV_DB_);
+  try{
+    var rq=indexedDB.open('evolve',1);
+    rq.onupgradeneeded=function(e){ var db=e.target.result; if(!db.objectStoreNames.contains('outbox')) db.createObjectStore('outbox',{keyPath:'clientId'}); };
+    rq.onsuccess=function(e){ EV_DB_=e.target.result; cb(EV_DB_); };
+    rq.onerror=function(){ cb(null); };
+  }catch(e){ cb(null); }
+}
+function evOutboxPut(entry,cb){ evIdb(function(db){ if(!db)return cb&&cb(false); try{ var tx=db.transaction('outbox','readwrite'); tx.objectStore('outbox').put(entry); tx.oncomplete=function(){cb&&cb(true);}; tx.onerror=function(){cb&&cb(false);}; }catch(e){cb&&cb(false);} }); }
+function evOutboxAll(cb){ evIdb(function(db){ if(!db)return cb([]); try{ var out=[],tx=db.transaction('outbox','readonly'),cur=tx.objectStore('outbox').openCursor(); cur.onsuccess=function(e){ var c=e.target.result; if(c){out.push(c.value);c.continue();}else cb(out); }; cur.onerror=function(){cb([]);}; }catch(e){cb([]);} }); }
+function evOutboxDel(id,cb){ evIdb(function(db){ if(!db)return cb&&cb(); try{ var tx=db.transaction('outbox','readwrite'); tx.objectStore('outbox').delete(id); tx.oncomplete=function(){cb&&cb();}; tx.onerror=function(){cb&&cb();}; }catch(e){cb&&cb();} }); }
+function evBadge(){ evOutboxAll(function(list){
+  var n=list.length, el=document.getElementById('evOutbox');
+  if(!n){ if(el)el.style.display='none'; return; }
+  if(!el){ el=document.createElement('div'); el.id='evOutbox'; el.style.cssText='position:fixed;left:12px;right:12px;bottom:12px;z-index:60;background:#1558d6;color:#fff;border-radius:12px;padding:11px 14px;font-size:14px;font-weight:600;box-shadow:0 6px 24px rgba(0,0,0,.45);display:flex;justify-content:space-between;align-items:center;gap:10px;'; document.body.appendChild(el); }
+  el.style.display='flex';
+  el.innerHTML='<span>📡 '+n+' capture'+(n>1?'s':'')+' waiting to send</span>';
+  var b=document.createElement('button'); b.textContent='Send now'; b.style.cssText='background:#fff;color:#1558d6;border:0;border-radius:8px;padding:6px 12px;font-weight:700;cursor:pointer;flex:none;'; b.onclick=function(){evFlushOutbox(true);}; el.appendChild(b);
+}); }
+function evFlushOutbox(manual){
+  if(EV_flushing||!S.token) return;
+  if(!navigator.onLine){ if(manual)toast('Still offline — they\'ll send the moment you reconnect',true); return; }
+  EV_flushing=true;
+  evOutboxAll(function(list){
+    if(!list.length){ EV_flushing=false; evBadge(); return; }
+    var i=0, sent=0;
+    (function next(){
+      if(i>=list.length){ EV_flushing=false; evBadge(); if(sent)toast('Synced — '+sent+' saved capture'+(sent>1?'s':'')+' sent ✓'); return; }
+      var en=list[i++];
+      function send(links){
+        var payload={token:S.token,clientId:en.clientId,category:en.category,summary:en.summary,fields:en.fields,photoLinks:links,gps:en.gps,device:en.device};
+        call('apiSubmit',[payload],function(res){ if(res&&res.ok){ sent++; evOutboxDel(en.clientId,next); } else { next(); } }, function(){ EV_flushing=false; evBadge(); });
+      }
+      if(en.links){ send(en.links); }
+      else { uploadQueue((en.photos||[]).map(function(p){return {p:p,tag:p.tag||''};}),0,[],0,function(links){ send(links); }); }
+    })();
+  });
+}
 function submitForm(){
   var c=collect();
   if(c.missing.length){toast('Please fill: '+c.missing.join(', '),true);return;}
-  document.getElementById('submitBtn').disabled=true;
+  var btn=document.getElementById('submitBtn'); btn.disabled=true;
+  var cid='C'+Date.now()+'-'+Math.floor(Math.random()*1e6);
+  var photos=[]; S.cat.fields.forEach(function(f){ if(f.type==='photo'){ (S.photos[f.k]||[]).forEach(function(p){ photos.push({name:p.name,mimeType:p.mimeType,data:p.data,tag:f.tag||''}); }); } });
+  var entry={clientId:cid,category:S.cat.id,summary:buildSummary(c.fields),fields:c.fields,gps:S.gps,device:navigator.userAgent,photos:photos,ts:Date.now()};
+  if(!navigator.onLine){
+    evOutboxPut(entry,function(){ btn.disabled=false; goHome(); evBadge(); toast('You\'re offline — saved on this phone. It\'ll send automatically when you reconnect.'); });
+    return;
+  }
   var queue=gatherPhotos();
   uploadQueue(queue,0,[],0,function(links,failed){
-    var payload={token:S.token,category:S.cat.id,summary:buildSummary(c.fields),fields:c.fields,
-      photoLinks:links,gps:S.gps,device:navigator.userAgent};
+    var payload={token:S.token,clientId:cid,category:entry.category,summary:entry.summary,fields:entry.fields,photoLinks:links,gps:S.gps,device:entry.device};
     showOverlay('Saving…');
     call('apiSubmit',[payload],function(res){
-      document.getElementById('submitBtn').disabled=false;
-      if(!res.ok){hideOverlay();toast(res.error||'Save failed',true);if(/sign in/i.test(res.error||''))signOut();return;}
+      btn.disabled=false;
+      if(!res||!res.ok){
+        hideOverlay();
+        if(/sign in/i.test((res&&res.error)||'')){ toast(res.error,true); signOut(); return; }
+        evOutboxPut(entry,function(){ goHome(); evBadge(); toast('Saved on this phone — the server couldn\'t finish, it\'ll retry automatically. Nothing lost.',true); });
+        return;
+      }
       var msg=res.message||'Saved.';if(failed)msg+=' — note: '+failed+' photo'+(failed>1?'s':'')+' didn\'t upload';
       showSuccess(msg);
-    },function(e){document.getElementById('submitBtn').disabled=false;hideOverlay();toast(String(e&&e.message||e),true);});
+    },function(e){
+      btn.disabled=false; hideOverlay();
+      evOutboxPut(entry,function(){ goHome(); evBadge(); toast('No connection — saved on this phone. It\'ll send automatically. Nothing lost.',true); });
+    });
   });
 }
 function gatherPhotos(){

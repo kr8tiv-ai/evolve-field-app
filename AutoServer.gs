@@ -38,7 +38,13 @@ var NOTIFY_OWNER_ON_SUBMIT = true;
 var NOTIFY_OWNER_EMAIL = "manager@yourcompany.com";
 
 function apiSubmit(payload){
+  // Idempotency: a flaky-connection retry (or the offline outbox) resends the same
+  // clientId — return the prior result instead of filing a duplicate row. CacheService
+  // (6h) covers realistic retry windows.
+  var _cache, _cid = payload && payload.clientId;
+  try { _cache = CacheService.getScriptCache(); if (_cid) { var _prev = _cache.get('cid_' + _cid); if (_prev) return { ok: true, id: _prev, message: 'Already saved.', dedup: true }; } } catch (_c) {}
   var res = apiSubmit_core_(payload);
+  try { if (_cid && _cache && res && res.ok && res.id) _cache.put('cid_' + _cid, String(res.id), 21600); } catch (_c2) {}
   try { if (NOTIFY_OWNER_ON_SUBMIT && res && res.ok) { EV_notifyOwnerOnSubmit_(payload, res); } }
   catch (e) { try { appLog_("NotifyOwner", "notify error: " + e); } catch(_e){} }
   try { if (res && res.ok) { EV_fileInbox_(); } } catch (e2) {} // instant-file hook
