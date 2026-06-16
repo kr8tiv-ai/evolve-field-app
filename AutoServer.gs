@@ -967,6 +967,7 @@ function EV_routeCategory_(cat, details){
 
 function EV_fileExpense_(book, irow, ih, details, photo, sub){
   if (GEMINI_API_KEY && photo && (!details.vendor || !details.total)) { try { var _o=EV_ocrReceipt_(photo); if(_o){ details.vendor=details.vendor||_o.vendor; details.total=details.total||_o.total; details.category=details.category||_o.category; details.what=details.what||_o.items; } } catch(_x){} } // OCR pre-fill (gated)
+  if (EV_isDupReceipt_(book, details)) { try{ appLog_('Receipt','Duplicate receipt skipped: '+(details.vendor||'')+' $'+(details.total||'')+' '+(details.date||'')); }catch(_d){} return 'Expenses (duplicate skipped)'; }
   var exp=EV_sheetEndingWith_(book,'Expenses');
   var lastCol=exp.getLastColumn();
   var scanN=Math.min(20, exp.getMaxRows());
@@ -999,7 +1000,13 @@ function EV_fileExpense_(book, irow, ih, details, photo, sub){
   function put(name,val){ var k=gi(name); if(k>=0) rowArr[k]=EV_safeCell_(val); }
   var by=irow[EV_colIndex_(ih,'Captured')];
   var summary=irow[EV_colIndex_(ih,'Summary')];
-  put('Date', EV_toDate_(irow[0]));
+  // Bookkeeping date = the PRINTED RECEIPT date (details.date), not the submission timestamp.
+  // If it is missing or impossible (future), fall back to the submission date and let the
+  // verifier flag it in the Receipt Log Issue column rather than fabricating a real spend date.
+  var _rcptD = EV_toDate_(details.date);
+  var _future = (_rcptD instanceof Date) && _rcptD.getTime() > EV_now_().getTime()+86400000;
+  var _useDate = (_rcptD instanceof Date && !_future) ? _rcptD : EV_toDate_(irow[0]);
+  put('Date', _useDate);
   put('Purchased by', by);
   put('What was purchased', details.item||details.what||details.purchased||summary||'');
   put('Vendor', details.vendor||details.where||details.store||'');
@@ -1011,19 +1018,22 @@ function EV_fileExpense_(book, irow, ih, details, photo, sub){
   put('Description', String(summary||'')+' | SubID:'+sub+(photo?(' | Photo:'+photo):'')+' | auto-filed '+EV_fmtNow_());
   exp.getRange(target,1,1,lastCol).setValues([rowArr]);
 
-  // Mirror into the QuickBooks-ready 📒 Receipt Log (ledger of record). Best-effort — a
-  // failure here must NOT block the Expenses filing above. The scheduled router verifies
-  // totals/dates against the photo and fills the Issue/discrepancy column on its run.
+  // Verify typed values (deterministic — future date, math, sane total; no AI key / no OCR quota)
+  // and mirror into the QuickBooks-ready 📒 Receipt Log. Best-effort — never block the filing above.
+  var _issue=''; try { _issue=EV_verifyReceipt_(details); } catch(_v){}
+  var _total=EV_findAmount_(details);
+  var _gst=parseFloat(String(details.gst||details.tax||'').replace(/[^0-9.]/g,''));
+  var _sub=(!isNaN(_gst) && typeof _total==='number') ? (_total-_gst).toFixed(2) : '';
   try {
     var rl = EV_sheetEndingWith_(book, 'Receipt Log');
     if (rl) {
       rl.appendRow([
-        EV_toDate_(irow[0]),                                                       // Date
+        _useDate,                                                                  // Date (printed receipt date)
         EV_safeCell_(details.vendor||details.where||details.store||''),            // Vendor
         EV_safeCell_(details.category||details.about||'Field App'),                // Category
-        '',                                                                        // Subtotal (router fills)
+        _sub,                                                                      // Subtotal (Total − GST)
         EV_safeCell_(details.gst||details.tax||''),                                // GST/Tax
-        EV_findAmount_(details),                                                   // Total
+        _total,                                                                    // Total
         EV_safeCell_(details.payment||details.method||details.paidWith||''),       // Payment method
         EV_safeCell_(details.item||details.what||details.purchased||summary||''),  // Line items
         EV_safeCell_(details.qty||details.quantity||''),                           // Qty
@@ -1032,11 +1042,14 @@ function EV_fileExpense_(book, irow, ih, details, photo, sub){
         sub,                                                                       // Source (Inbox ID)
         EV_safeCell_(String(photo||'').split('\n')[0].replace(/^[^:]+:\s*/,'')),   // Photo link (first, de-tagged)
         EV_safeCell_(by||''),                                                      // Filed by
-        '',                                                                        // Issue/discrepancy (router fills)
+        EV_safeCell_(_issue),                                                      // Issue/discrepancy
         EV_fmtNow_()                                                               // Created
       ]);
     }
   } catch (_rl) { try { appLog_('Receipt','Receipt Log mirror failed for '+sub+': '+_rl); } catch(_e){} }
+
+  // Canonical vendor roll-up — populates the Vendors tab + de-typos the spend brain.
+  try { EV_upsertVendor_(book, details.vendor||details.where||details.store||'', details.category||details.about||'', _total, EV_toDate_(irow[0])); } catch(_uv){}
 
   return exp.getName()+'!row'+target;
 }
@@ -1055,26 +1068,28 @@ function EV_fileInbox_(){
       cCat=EV_colIndex_(ih,'Category'),
       cDet=EV_colIndex_(ih,'Details'),
       cPhoto=EV_colIndex_(ih,'Photo'),
-      cSub=EV_colIndex_(ih,'Submission');
+      cSub=EV_colIndex_(ih,'Submission'),
+      cSummary=EV_colIndex_(ih,'Summary');
   var filed=0, review=0, notes=[];
   for(var r=1;r<data.length;r++){
     var stt=String(data[r][cStatus]||'').trim().toUpperCase();
-    if(stt!=='NEW') continue;
+    if(stt!=='NEW' && stt!=='NEEDS REVIEW') continue;   // re-attempt stuck rows on every run
     var cat=String(data[r][cCat]||'');
     var sub=String(data[r][cSub]||'');
+    var summary=cSummary>=0?String(data[r][cSummary]||''):'';
     var det={}; try{ det=JSON.parse(data[r][cDet]||'{}'); }catch(e){ det={}; }
     var photo=String(data[r][cPhoto]||'');
-    var route=EV_routeCategory_(cat,det);
+    var dest=EV_routeDest_(cat,det,summary);
     try{
-      if(route==='Expenses'){
-        var ref=EV_fileExpense_(book,data[r],ih,det,photo,sub);
+      var ref = (dest==='REVIEW') ? null : EV_fileByDest_(book,dest,data[r],ih,det,photo,sub,summary);
+      if(ref){
         inbox.getRange(r+1,cStatus+1).setValue('FILED');
         inbox.getRange(r+1,cFiled+1).setValue(ref);
         if(cNotes>=0) inbox.getRange(r+1,cNotes+1).setValue('Auto-filed to '+ref+' '+EV_fmtNow_());
         filed++; notes.push(sub+'->'+ref);
       } else {
-        inbox.getRange(r+1,cStatus+1).setValue('NEEDS REVIEW');
-        if(cNotes>=0) inbox.getRange(r+1,cNotes+1).setValue('Auto-filer: category "'+cat+'" needs routing '+EV_fmtNow_());
+        if(stt!=='NEEDS REVIEW') inbox.getRange(r+1,cStatus+1).setValue('NEEDS REVIEW');
+        if(cNotes>=0) inbox.getRange(r+1,cNotes+1).setValue('Needs human/Claude — '+cat+' '+EV_fmtNow_());
         review++; notes.push(sub+'->REVIEW');
       }
     }catch(err){
@@ -1175,9 +1190,10 @@ function EV_generateInsights(){
   function inM(d,m,y){ return d&&d.getMonth()===m&&d.getFullYear()===y; }
   var spendThis=0,spendPrev=0,byV={},byC={},largest=null,seen={};
   rows.forEach(function(e){
-    if(inM(e.date,mNow,yNow)){ spendThis+=e.amount; byV[e.vendor]=(byV[e.vendor]||0)+e.amount; byC[e.category]=(byC[e.category]||0)+e.amount; if(!largest||e.amount>largest.amount) largest=e; }
+    var _cv=(typeof EV_vendorCanon_==='function')?EV_vendorCanon_(e.vendor):e.vendor;
+    if(inM(e.date,mNow,yNow)){ spendThis+=e.amount; byV[_cv]=(byV[_cv]||0)+e.amount; byC[e.category]=(byC[e.category]||0)+e.amount; if(!largest||e.amount>largest.amount) largest=e; }
     else if(inM(e.date,pm,py)){ spendPrev+=e.amount; }
-    if(e.date && (e.date.getFullYear()<yNow||(e.date.getFullYear()===yNow&&e.date.getMonth()<mNow))) seen[e.vendor]=true;
+    if(e.date && (e.date.getFullYear()<yNow||(e.date.getFullYear()===yNow&&e.date.getMonth()<mNow))) seen[_cv]=true;
   });
   var cands=[];
   function add(type,title,detail,score){ cands.push({type:type,title:title,detail:detail,score:Math.max(0,Math.min(100,score+(weights[type]||0)*10))}); }
