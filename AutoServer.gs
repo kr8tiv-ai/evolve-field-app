@@ -95,6 +95,9 @@ var EV = {
   TZ: 'America/Edmonton',
   TODD: 'todd@evolveecoblasting.com',
   MATT: 'manager@yourcompany.com',
+  // NOTIFICATION MODEL: the OWNER (Todd) gets ONLY the morning digest + app-requested items (quotes).
+  // Everything operational — dispatch sweep, the personal digest, receipt check, router/failure alerts,
+  // proof runs — goes to the OPERATOR (Matt) only. DIGEST_TO is therefore used ONLY by the morning digest.
   get DIGEST_TO() { return EV.TODD + ',' + EV.MATT; },
   SHEETS: {
     dispatch: 'Dispatch', todo: 'To-Do', actions: 'Action Items',
@@ -619,7 +622,7 @@ function EV_dispatchSweep() {
         '<div style="font-size:16px;font-weight:bold;color:#b3261e;">Evolve — items that need a human (' + EV_fmt_(EV_now_(), 'MMM d, HH:mm') + ')</div>' +
         '<ul style="font-size:14px;padding-left:18px;">' + findings.map(function (f) { return '<li style="margin:4px 0;">' + f + '</li>'; }).join('') + '</ul>' +
         '<div style="font-size:12px;color:#667;">Server-side audit (runs 7 AM, 1 PM, 7 PM whether the PC is on or off). Reply to add or resolve items.</div></div>';
-      EV_send_(EV.TODD, 'Evolve sweep — ' + findings.length + ' item(s) need attention', html, { cc: EV.MATT });
+      EV_send_(EV.MATT, 'Evolve sweep — ' + findings.length + ' item(s) need attention', html); // operator only; Todd sees what matters in the morning digest
     }
     return findings.length + ' findings';
   } catch (err) {
@@ -665,11 +668,14 @@ function EV_replyMonitor() {
   /*__evGuard*/ try{GmailApp.getInboxUnreadCount();}catch(__ng){try{appLog_('Trigger','EV_replyMonitor skipped: Gmail scope not authorized yet — no FAILED alert sent (pending one-time consent).');}catch(_l){}return;}
   try {
     var label = EV_getLabel_(EV.LABEL);
+    var book = SpreadsheetApp.openById(EV_FILER_SS_ID);
     var queries = [
       'subject:"Evolve Morning Digest" -label:"' + EV.LABEL + '" newer_than:7d',
       'subject:"The Daily Digest" -label:"' + EV.LABEL + '" newer_than:7d',
       'subject:"Evolve sweep" -label:"' + EV.LABEL + '" newer_than:7d',
-      'subject:"New quote ECO-Q" -label:"' + EV.LABEL + '" newer_than:14d'
+      'subject:"Evolve receipt check" -label:"' + EV.LABEL + '" newer_than:14d',
+      'subject:"New quote ECO-Q" -label:"' + EV.LABEL + '" newer_than:14d',
+      'subject:"Evolve — " -label:"' + EV.LABEL + '" newer_than:14d'
     ];
     var processed = 0, logged = 0;
     queries.forEach(function (q) {
@@ -679,16 +685,21 @@ function EV_replyMonitor() {
         var newItems = [];
         msgs.forEach(function (m) {
           var from = m.getFrom();
-          if (/manager@yourcompany\.com/i.test(from)) return;        // skip our own outbound
+          // Skip our OWN automated send (operator address + original subject, no "Re:"), but DO process a
+          // human reply FROM the operator (subject starts "Re:") so Matt can give feedback by reply too.
+          var subj = String(m.getSubject ? m.getSubject() : '');
+          if (/manager@yourcompany\.com/i.test(from) && !/^\s*re:/i.test(subj)) return;
           if (m.isInChats && m.isInChats()) return;
           var items = EV_extractItems_(m.getPlainBody());
           items.forEach(function (it) { newItems.push({ text: it, from: from }); });
         });
         if (newItems.length) {
-          newItems.forEach(function (n) { if (EV_addToDo_(n.text, n.from)) logged++; });
+          // Incorporate each reply line: classify it (approval / fix / request / correction / done /
+          // feedback) and route it into the right system action — not just dump it into To-Do.
+          var actions = newItems.map(function (n) { logged++; return '• ' + n.text + '  →  ' + EV_routeReplyItem_(book, n.text, n.from); });
           try {
-            th.reply('Logged to the Evolve workbook:\n\n' + newItems.map(function (n) { return '• ' + n.text; }).join('\n') +
-              '\n\nThese are now in the To-Do tab and will surface in tomorrow\'s digest. — Evolve Autopilot');
+            th.reply('Got it — incorporated into the Evolve system:\n\n' + actions.join('\n') +
+              '\n\nRequests and fixes were sent to Matt; corrections and approvals are flagged in the workbook. — Evolve');
           } catch (e) {}
         }
         th.addLabel(label);
@@ -737,6 +748,75 @@ function EV_addToDo_(text, from) {
   } catch (e) { return false; }
 }
 
+/** Append a To-Do with an explicit category + priority (used by the reply router). */
+function EV_addToDoCat_(text, from, category, priority) {
+  try {
+    var sh = EV_sheet_(EV.SHEETS.todo); if (!sh) return false;
+    var nums = EV_todoItems_().map(function (t) { return +t.num; });
+    var next = (nums.length ? Math.max.apply(null, nums) : 0) + 1;
+    var who = (from || '').replace(/.*</, '').replace(/>.*/, '') || from;
+    sh.appendRow([String(next), text, category || 'Inbox / Reply', priority || 'Medium', 'To Do', EV_fmt_(EV_now_(), 'MM/dd/yyyy'), '', 'From an email reply (' + who + ')']);
+    appLog_('Autopilot', 'To-Do +1 [' + (category || 'Reply') + '] from reply: ' + String(text).slice(0, 80));
+    return true;
+  } catch (e) { return false; }
+}
+
+/** Notify the operator (Matt) about a request/fix/correction from a reply. */
+function EV_emailOperator_(subject, body, from) {
+  try { MailApp.sendEmail(EV.MATT, subject, String(body) + '\n\n— from a reply by ' + (from || '') + ', via the Evolve reply monitor.'); } catch (e) {}
+}
+
+/** Mark a quote Approved (from a reply). Returns true if the row was found + updated. */
+function EV_markQuoteApproved_(book, qno, who) {
+  try {
+    book = book || SpreadsheetApp.openById(EV_FILER_SS_ID);
+    var q = EV_sheetEndingWith_(book, 'Quotes'); if (!q) return false;
+    var v = q.getDataRange().getValues(); var h = EV_headerIndex_(v, ['quote', 'client', 'total']); if (h < 0) return false;
+    var H = v[h], cNo = EV_colIndex_(H, 'Quote'), cStatus = EV_colIndex_(H, 'Status');
+    for (var r = h + 1; r < v.length; r++) {
+      if (String(v[r][cNo]).trim().toUpperCase() === String(qno).trim().toUpperCase()) {
+        if (cStatus >= 0) q.getRange(r + 1, cStatus + 1).setValue('Approved (reply ' + EV_today_() + ')');
+        return true;
+      }
+    }
+  } catch (e) {}
+  return false;
+}
+
+/** Incorporate ONE reply line into the system based on its classification. Returns a short
+ *  description of the action taken (shown back to the replier). */
+function EV_routeReplyItem_(book, text, from) {
+  var cls = EV_classifyReply_(text);
+  var who = (from || '').replace(/.*</, '').replace(/>.*/, '') || from;
+  try {
+    switch (cls.type) {
+      case 'approval':
+        var ok = EV_markQuoteApproved_(book, cls.quote, who);
+        EV_addToDoCat_('Schedule approved quote ' + cls.quote, from, 'Dispatch', 'High');
+        return 'approved ' + cls.quote + (ok ? ' — status set, scheduling To-Do raised' : ' (quote row not found; To-Do raised)');
+      case 'done':
+        return 'noted as done';
+      case 'fix':
+        EV_addToDoCat_('FIX: ' + text, from, 'Fix / Bug', 'High');
+        try { EV_raiseActionItem_(book, 'reply-fix-' + EV_slug_(text), 'Field-reported fix: ' + text, 'Fix', who, '', 'Matt'); } catch (e) {}
+        EV_emailOperator_('Evolve — fix reported by ' + who, text, from);
+        return 'logged as a FIX (To-Do High + Action Item) and emailed Matt';
+      case 'correction':
+        EV_addToDoCat_('CORRECTION: ' + text, from, 'Correction', 'High');
+        try { EV_raiseActionItem_(book, 'reply-corr-' + EV_slug_(text), 'Data correction from a reply: ' + text, 'Correction', who, '', 'Matt'); } catch (e) {}
+        EV_emailOperator_('Evolve — correction from ' + who, text, from);
+        return 'flagged as a CORRECTION (Action Item) and emailed Matt';
+      case 'request':
+        EV_addToDoCat_('REQUEST: ' + text, from, 'Request', 'Medium');
+        EV_emailOperator_('Evolve — request from ' + who, text, from);
+        return 'logged as a REQUEST and emailed Matt';
+      default:
+        EV_addToDoCat_('FEEDBACK: ' + text, from, 'Feedback / Reply', 'Low');
+        return 'logged as feedback';
+    }
+  } catch (e) { try { EV_addToDo_(text, from); } catch (_e) {} return 'logged (routing fell back)'; }
+}
+
 function EV_getLabel_(name) {
   return GmailApp.getUserLabelByName(name) || GmailApp.createLabel(name);
 }
@@ -755,6 +835,7 @@ var EV_DD_TAGLINES = [
 ];
 
 function EV_personalDigest() {
+  /*__evGuard*/ try{GmailApp.getInboxUnreadCount();}catch(__ng){try{appLog_('Trigger','EV_personalDigest skipped: Gmail scope not authorized yet — run EV_installGmail in the editor and grant consent (one-time). No FAILED alert sent.');}catch(_l){}return;}
   try {
     var threads = GmailApp.search('subject:"The Daily Digest"', 0, 8);
     var master = [];
@@ -788,7 +869,7 @@ function EV_personalDigest() {
     else html += '<p>The list is mysteriously empty. Either you finished everything, or the raccoons ate it. Reply with items to rebuild it.</p>';
     if (victory.length) html += '<div style="font-weight:bold;margin:10px 0 4px;">✅ VICTORY LAP</div><ul style="font-size:14px;padding-left:18px;color:#1a7f37;">' + victory.map(function (x) { return '<li>' + EV_esc_(x) + '</li>'; }).join('') + '</ul>';
     html += '<div style="font-size:12px;color:#667;background:#faf6ee;border-radius:8px;padding:10px 12px;margin-top:12px;">Reply with new items from any account, and they land on tomorrow\'s list automatically. Say "done &lt;thing&gt;" to retire it. Sent server-side; it goes out whether or not the computer is on.</div></div></div>';
-    EV_send_(EV.DIGEST_TO, 'The Daily Digest — ' + EV_fmt_(EV_now_(), 'EEEE, MMMM d'), html);
+    EV_send_(EV.MATT, 'The Daily Digest — ' + EV_fmt_(EV_now_(), 'EEEE, MMMM d'), html); // operator only (not Todd)
     appLog_('Autopilot', 'PERSONAL DAILY DIGEST sent server-side — heartbeat (' + master.length + ' items)');
     return 'sent ' + master.length + ' items';
   } catch (err) {
@@ -812,8 +893,12 @@ function EV_listFromHtml_(html) {
 //  FAILURE NOTIFY  (so a silent failure becomes visible)
 // ---------------------------------------------------------------------------
 function EV_failNotify_(fn, err) {
-  try { appLog_('Autopilot', 'ERROR in ' + fn + ': ' + (err && err.message ? err.message : err)); } catch (e) {}
-  if(/authoriz/i.test(String((err&&err.message)||err)))return; try { MailApp.sendEmail(EV.MATT, 'Evolve Autopilot FAILED: ' + fn, String(err && err.stack ? err.stack : err)); } catch (e) {}
+  var m = String((err && err.message) || err);
+  try { appLog_('Autopilot', 'ERROR in ' + fn + ': ' + m); } catch (e) {}
+  // Never email on authorization/scope/permission issues — they self-heal on a one-time re-consent and
+  // just spam the operator. (Fixes the "Specified permissions are not sufficient" email storm.)
+  if (/authoriz|permission|not sufficient|insufficient|\bscope\b|PERMISSION_DENIED|access.?denied/i.test(m)) return;
+  try { MailApp.sendEmail(EV.MATT, 'Evolve Autopilot FAILED: ' + fn, String(err && err.stack ? err.stack : err)); } catch (e) {}
 }
 
 // ===========================================================================
@@ -878,7 +963,7 @@ function EV_proofRun() {
   html = '<div style="background:#1a7f37;color:#fff;padding:8px 12px;font-family:Arial;border-radius:6px;margin-bottom:8px;">' +
     'AUTONOMY PROOF — fired by an Apps Script time trigger on Google\'s servers at ' + stamp +
     ' (America/Edmonton). No PC, no Claude app involved.</div>' + html;
-  EV_send_(EV.DIGEST_TO, 'Evolve Autopilot — autonomy proof ' + stamp, html);
+  EV_send_(EV.MATT, 'Evolve Autopilot — autonomy proof ' + stamp, html); // operator only
   appLog_('Autopilot', 'PROOF RUN executed server-side at ' + stamp + ' — heartbeat');
   return 'proof sent ' + stamp;
 }

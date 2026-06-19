@@ -58,3 +58,41 @@ so its insights aren't pruned). One-shot: `EV_intelligenceBackfill()`.
    then `EV_installDriveIntake` (starts the hourly loose-receipt loop — clears the "Evolve temp" backlog).
 
 All deterministic and free. No paid API. Nothing overwrites a human-entered value.
+
+---
+
+# Notifications, permissions & the email reply loop (2026-06-19)
+
+## The "broken permissions" emails — fixed
+Cause: `EV_personalDigest` (and the reply monitor) call `GmailApp`, but the **live project's granted
+token predates the `gmail.modify` scope**, so they threw *"Specified permissions are not sufficient"* —
+and `EV_failNotify_` only suppressed errors containing "authoriz", so every failure emailed Matt.
+
+- `EV_failNotify_` now suppresses **permission/scope** errors too (no more email storm).
+- `EV_personalDigest` got the same **Gmail‑auth guard** the reply monitor has — it no‑ops cleanly (one
+  App Log line) instead of throwing when Gmail isn't authorized.
+- **One‑time human fix to make Gmail actually work:** in the Apps Script editor, run **`EV_installGmail`**
+  (or any Gmail function) → *Advanced → Allow* to grant `gmail.modify`. That clears the errors for good.
+  The manifest is already correct; only the consent is stale.
+
+## Todd only gets the morning email
+Notification model is now explicit (see the `EV` object comment): the **owner (Todd)** receives **only
+the morning digest + app‑requested items (quotes)**. Everything operational — **dispatch sweep, personal
+digest, receipt check, router‑down alert, failure alerts, proof runs** — goes to the **operator (Matt)
+only**. (Todd still sees what matters because the sweep findings are summarized in his morning digest.)
+
+## Replies flow back into the system
+`EV_replyMonitor` now **classifies every reply line** (`EV_classifyReply_`) and **routes it** (`EV_routeReplyItem_`)
+instead of dumping everything into To‑Do:
+
+| Reply looks like | Action |
+|---|---|
+| **Approval** ("approved, send ECO‑Q‑…") | quote status → Approved + a scheduling To‑Do |
+| **Fix / bug** ("the scanner is broken") | To‑Do (High) + Action Item + email Matt |
+| **Correction** ("actually that total is $48.20") | flagged as a Correction Action Item + email Matt |
+| **Request** ("can you add an equipment tab") | To‑Do (Request) + email Matt |
+| **Done** ("done follow up with Al") | noted/retired |
+| **Anything else** | logged as feedback |
+
+It replies with exactly what it did, and now also picks up **Matt's own replies** (a human "Re:" from the
+operator is processed; the script's automated originals are skipped). Needs the same Gmail consent above.

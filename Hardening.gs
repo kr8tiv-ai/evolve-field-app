@@ -447,6 +447,26 @@ function EV_requireConfigured_() {
 }
 
 /* ---------------------------------------------------------------------------
+ *  EMAIL-REPLY CLASSIFICATION  (feedback loop)  — pure, unit-tested
+ * ------------------------------------------------------------------------- */
+
+/** Short slug for keys/dedupe. */
+function EV_slug_(s) { return String(s || '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 40); }
+
+/** Classify a single reply line into how the system should incorporate it.
+ *  Returns {type, quote}. type ∈ approval|done|fix|correction|request|feedback. */
+function EV_classifyReply_(text) {
+  var t = String(text || '').trim(), low = t.toLowerCase();
+  var quote = (t.match(/ECO-Q-\d{6}-\d{1,3}/i) || [])[0] || '';
+  if (/^(done|finished|complete[d]?)\b/.test(low)) return { type: 'done', quote: quote };
+  if (quote && /\b(approve|approved|go ahead|send it|yes,? send|looks good|ship it|sign off|accept(ed)?|do it)\b/.test(low)) return { type: 'approval', quote: quote };
+  if (/\b(broken|not working|doesn'?t work|isn'?t working|won'?t work|\bbug\b|\berror\b|crash|fix (this|the|it|that)|\bfailed\b|glitch|stopped working)\b/.test(low)) return { type: 'fix', quote: quote };
+  if (/\b(actually|correction|should be|that'?s wrong|is wrong|change .+ to |the (total|amount|price|date|vendor|customer|address)\b.*(is|was|should|wrong|not))\b/.test(low) || /\bnot\s*\$?\d/.test(low)) return { type: 'correction', quote: quote };
+  if (/\b(can (we|you)|could (we|you)|please (add|make|build|set up)|feature|would be (nice|good|great|helpful)|i want|we (need|should)|add (a|an|the)|build (a|an|the)|make it|it should|let'?s add|wish it|set up)\b/.test(low)) return { type: 'request', quote: quote };
+  return { type: 'feedback', quote: quote };
+}
+
+/* ---------------------------------------------------------------------------
  *  SECRET ROTATION  [F-5]
  * ------------------------------------------------------------------------- */
 
@@ -506,6 +526,14 @@ function EV_hardeningChecks_() {
   // round-2: exact column match so 'Total' != 'Subtotal' (which a substring match would hit first)
   eq('colExact Total != Subtotal', EV_colExact_(['Date', 'Vendor', 'Category', 'Subtotal', 'GST / Tax', 'Total'], 'Total'), 5);
   eq('colExact prefers exact over Subtotal', EV_colExact_(['Subtotal', 'Total'], 'Total'), 1);
+  // reply classification (feedback loop)
+  eq('reply approval', EV_classifyReply_('Approved, go ahead with ECO-Q-061426-01').type, 'approval');
+  eq('reply approval quote', EV_classifyReply_('yes send ECO-Q-061426-01').quote, 'ECO-Q-061426-01');
+  eq('reply fix', EV_classifyReply_('the receipt scanner is broken, fix it').type, 'fix');
+  eq('reply request', EV_classifyReply_('can you add a tab for equipment maintenance').type, 'request');
+  eq('reply correction', EV_classifyReply_('actually that total should be $48.20 not $42').type, 'correction');
+  eq('reply done', EV_classifyReply_('done follow up with Al').type, 'done');
+  eq('reply feedback default', EV_classifyReply_('great work this week').type, 'feedback');
   // A-2: financial block
   eq('block: no total', EV_receiptFinancialIssue_({ vendor: 'X' }) !== '', true);
   eq('block: zero total', EV_receiptFinancialIssue_({ total: '0.00' }) !== '', true);
