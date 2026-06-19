@@ -1053,13 +1053,18 @@ function evFlushOutbox(manual){
       var en=list[i++];
       function send(links){
         var payload={token:S.token,clientId:en.clientId,category:en.category,summary:en.summary,fields:en.fields,photoLinks:links,gps:en.gps,device:en.device};
-        call('apiSubmit',[payload],function(res){ if(res&&res.ok){ sent++; evOutboxDel(en.clientId,next); } else { next(); } }, function(){ EV_flushing=false; evBadge(); });
+        // C-4: one failed entry must not block the rest — on error, skip to the next (entry stays queued).
+        call('apiSubmit',[payload],function(res){ if(res&&res.ok){ sent++; evOutboxDel(en.clientId,next); } else { next(); } }, function(){ next(); });
       }
       if(en.links){ send(en.links); }
-      else { uploadQueue((en.photos||[]).map(function(p){return {p:p,tag:p.tag||''};}),0,[],0,function(links){ send(links); }); }
+      // C-2: atomic on flush too — if a photo still won't upload, keep the entry and retry later.
+      else { uploadQueue((en.photos||[]).map(function(p){return {p:p,tag:p.tag||''};}),0,[],0,function(links,failed){ if(failed){ next(); } else { send(links); } }); }
     })();
   });
 }
+// C-4: periodic background flush so a capture saved offline still sends even if the 'online'
+// event never fires (some mobile WebViews) and the app is left open.
+try{ if(typeof window!=='undefined' && !window.__evFlushTimer){ window.__evFlushTimer=setInterval(function(){ try{ if(navigator.onLine && typeof S!=='undefined' && S.token && !EV_flushing) evFlushOutbox(false); }catch(e){} }, 60000); } }catch(e){}
 function submitForm(){
   var c=collect();
   if(c.missing.length){toast('Please fill: '+c.missing.join(', '),true);return;}
@@ -1068,11 +1073,26 @@ function submitForm(){
   var photos=[]; S.cat.fields.forEach(function(f){ if(f.type==='photo'){ (S.photos[f.k]||[]).forEach(function(p){ photos.push({name:p.name,mimeType:p.mimeType,data:p.data,tag:f.tag||''}); }); } });
   var entry={clientId:cid,category:S.cat.id,summary:buildSummary(c.fields),fields:c.fields,gps:S.gps,device:navigator.userAgent,photos:photos,ts:Date.now()};
   if(!navigator.onLine){
-    evOutboxPut(entry,function(){ btn.disabled=false; goHome(); evBadge(); toast('You\'re offline — saved on this phone. It\'ll send automatically when you reconnect.'); });
+    // C-3: only report success if the phone actually persisted it. If IndexedDB is unavailable
+    // (private mode / storage full), keep the user on the form and warn — never a false "saved".
+    evOutboxPut(entry,function(ok){ btn.disabled=false;
+      if(ok){ goHome(); evBadge(); toast('You\'re offline — saved on this phone. It\'ll send automatically when you reconnect.'); }
+      else { toast('Couldn\'t save on this phone (private mode or storage full). Stay on this screen and try again, or screenshot your entry.',true); }
+    });
     return;
   }
   var queue=gatherPhotos();
   uploadQueue(queue,0,[],0,function(links,failed){
+    if(failed){
+      // C-2: never file a receipt/job photo capture WITHOUT its photo. Queue the whole capture (with
+      // the raw photos) and let the outbox retry the uploads. Atomic: all photos in, or fully queued.
+      hideOverlay();
+      evOutboxPut(entry,function(ok){ btn.disabled=false;
+        if(ok){ goHome(); evBadge(); toast(failed+' photo'+(failed>1?'s':'')+' didn\'t upload — saved on this phone, it\'ll finish sending automatically. Nothing lost.',true); }
+        else { toast('A photo wouldn\'t upload and the phone couldn\'t save it. Stay on this screen and try again.',true); }
+      });
+      return;
+    }
     var payload={token:S.token,clientId:cid,category:entry.category,summary:entry.summary,fields:entry.fields,photoLinks:links,gps:S.gps,device:entry.device};
     showOverlay('Saving…');
     call('apiSubmit',[payload],function(res){
@@ -1080,14 +1100,13 @@ function submitForm(){
       if(!res||!res.ok){
         hideOverlay();
         if(/sign in/i.test((res&&res.error)||'')){ toast(res.error,true); signOut(); return; }
-        evOutboxPut(entry,function(){ goHome(); evBadge(); toast('Saved on this phone — the server couldn\'t finish, it\'ll retry automatically. Nothing lost.',true); });
+        evOutboxPut(entry,function(ok){ if(ok){ goHome(); evBadge(); } toast(ok?'Saved on this phone — the server couldn\'t finish, it\'ll retry automatically. Nothing lost.':'Could not save on this phone — please try again.',true); });
         return;
       }
-      var msg=res.message||'Saved.';if(failed)msg+=' — note: '+failed+' photo'+(failed>1?'s':'')+' didn\'t upload';
-      showSuccess(msg);
+      showSuccess(res.message||'Saved.');
     },function(e){
       btn.disabled=false; hideOverlay();
-      evOutboxPut(entry,function(){ goHome(); evBadge(); toast('No connection — saved on this phone. It\'ll send automatically. Nothing lost.',true); });
+      evOutboxPut(entry,function(ok){ if(ok){ goHome(); evBadge(); } toast(ok?'No connection — saved on this phone. It\'ll send automatically. Nothing lost.':'No connection and couldn\'t save — please try again.',true); });
     });
   });
 }

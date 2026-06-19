@@ -1,0 +1,4 @@
+# Local, ID-filled deploy files — NEVER commit (repo stays placeholder-only / rebrandable)
+deploy-local/
+node_modules/
+*.diff

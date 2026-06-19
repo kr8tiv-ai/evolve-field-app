@@ -184,7 +184,8 @@ function EV_values_(name) {
 /** Dispatch booked jobs: any row with a Customer (col E). Cols A..M. */
 function EV_dispatchJobs_() {
   var v = EV_values_(EV.SHEETS.dispatch), out = [];
-  for (var i = 6; i < v.length; i++) { // data starts after header row 6
+  var _s = EV_dataStart_(v, ['customer', 'crew', 'status']); if (_s < 0) _s = 6; // E-1: find data row by header signature
+  for (var i = _s; i < v.length; i++) {
     var r = v[i], cust = (r[4] || '').trim();
     if (!cust || cust.toUpperCase() === 'CUSTOMER') continue;
     if (/^(THIS WEEK|WHAT'S AHEAD|STATUS KEY)/i.test((r[1] || '').trim())) continue;
@@ -200,7 +201,8 @@ function EV_dispatchJobs_() {
 /** To-Do items: rows whose col A is a number (the #). */
 function EV_todoItems_() {
   var v = EV_values_(EV.SHEETS.todo), out = [];
-  for (var i = 6; i < v.length; i++) {
+  var _s = EV_dataStart_(v, ['task', 'priority', 'status']); if (_s < 0) _s = 6; // E-1
+  for (var i = _s; i < v.length; i++) {
     var r = v[i], num = (r[0] || '').trim();
     if (!/^\d+$/.test(num)) continue;
     var status = (r[4] || '').trim();
@@ -213,7 +215,8 @@ function EV_todoItems_() {
 /** Open Action Items: rows with a Status of Open / In progress. Cols A..H. */
 function EV_actionItems_() {
   var v = EV_values_(EV.SHEETS.actions), out = [];
-  for (var i = 6; i < v.length; i++) {
+  var _s = EV_dataStart_(v, ['alert', 'type', 'status']); if (_s < 0) _s = 6; // E-1
+  for (var i = _s; i < v.length; i++) {
     var r = v[i], status = (r[6] || '').trim();
     if (!/^(open|in progress|in-progress|blocked)$/i.test(status)) continue;
     out.push({ raised: r[0], alert: r[1], type: r[2], relates: r[3], due: r[4], owner: r[5], status: status, notes: r[7], dueDate: EV_parseDate_(r[4]) });
@@ -224,7 +227,8 @@ function EV_actionItems_() {
 /** Outstanding quotes: rows whose col A is an ECO-Q number. Cols A..T. */
 function EV_quotes_() {
   var v = EV_values_(EV.SHEETS.quotes), out = [];
-  for (var i = 6; i < v.length; i++) {
+  var _s = EV_dataStart_(v, ['quote', 'client', 'total']); if (_s < 0) _s = 6; // E-1
+  for (var i = _s; i < v.length; i++) {
     var r = v[i], no = (r[0] || '').trim();
     if (!/^ECO-Q-/i.test(no)) continue;
     out.push({ no: no, date: r[1], client: r[2], address: r[5], scope: r[6], total: r[9], status: (r[12] || '').trim(), validUntil: r[13], sqft: r[17], depth: r[19], validDate: EV_parseDate_(r[13]), dateObj: EV_parseDate_(r[1]) });
@@ -235,7 +239,8 @@ function EV_quotes_() {
 /** Leads: rows with a Status (col H) and a Lead name (col B). Cols A..L. */
 function EV_leads_() {
   var v = EV_values_(EV.SHEETS.leads), out = [];
-  for (var i = 6; i < v.length; i++) {
+  var _s = EV_dataStart_(v, ['lead', 'status', 'next action']); if (_s < 0) _s = 6; // E-1
+  for (var i = _s; i < v.length; i++) {
     var r = v[i], status = (r[7] || '').trim(), lead = (r[1] || '').trim();
     if (!lead || !status) continue;
     if (/^STATUS FLOW/i.test(lead)) continue;
@@ -600,6 +605,8 @@ function EV_previewDigest() {
 // ---------------------------------------------------------------------------
 function EV_dispatchSweep() {
   try { EV_fileInbox_(); } catch(_e){} // hook: server-side inbox filing (added 2026-06-13, Claude)
+  try { EV_rollupJobCosts_(); } catch(_jr){} // B-2: recompute per-job actual costs from receipts (idempotent)
+  try { EV_raiseSweepActionItems_(); } catch(_ai){} // B-4: raise money-loop Action Items, deduped by key
   try { EV_generateInsights(); } catch(_ei){} // hook: refresh business-brain insights
   try {
     var findings = EV_sweepFindings_();
@@ -818,6 +825,7 @@ function EV_deleteTriggers_(names) {
 
 /** Core triggers — work with the EXISTING scopes (no Gmail). Run this first. */
 function EV_installCore() {
+  EV_requireConfigured_();   // E-4: refuse to install while YOUR_* placeholders remain
   ScriptApp.getProjectTriggers().forEach(function(t){if(t.getHandlerFunction().indexOf("EV_")!==0)ScriptApp.deleteTrigger(t);});
   EV_deleteTriggers_(['EV_morningDigest', 'EV_dispatchSweep']);
   ScriptApp.newTrigger('EV_morningDigest').timeBased().atHour(7).nearMinute(45).everyDays(1).create();
@@ -942,7 +950,7 @@ function EV_findAmount_(details){
   for(var i=0;i<pref.length;i++){
     var k=pref[i];
     if(details[k]!=null && String(details[k]).trim()!==''){
-      var n=parseFloat(String(details[k]).replace(/[^0-9.\-]/g,''));
+      var n=EV_amount_(details[k]);          // robust money parse (handles 1,250.00)
       if(!isNaN(n)) return n;
     }
   }
@@ -950,7 +958,7 @@ function EV_findAmount_(details){
   var keys=Object.keys(details);
   for(var j=0;j<keys.length;j++){
     if(/total|amount/i.test(keys[j]) && !/unit|qty|quantity|sub|gst|hst|tax/i.test(keys[j])){
-      var n2=parseFloat(String(details[keys[j]]).replace(/[^0-9.\-]/g,''));
+      var n2=EV_amount_(details[keys[j]]);
       if(!isNaN(n2)) return n2;
     }
   }
@@ -966,18 +974,46 @@ function EV_routeCategory_(cat, details){
 }
 
 function EV_fileExpense_(book, irow, ih, details, photo, sub){
-  if (GEMINI_API_KEY && photo && (!details.vendor || !details.total)) { try { var _o=EV_ocrReceipt_(photo); if(_o){ details.vendor=details.vendor||_o.vendor; details.total=details.total||_o.total; details.category=details.category||_o.category; details.what=details.what||_o.items; } } catch(_x){} } // OCR pre-fill (gated)
-  if (EV_isDupReceipt_(book, details)) { try{ appLog_('Receipt','Duplicate receipt skipped: '+(details.vendor||'')+' $'+(details.total||'')+' '+(details.date||'')); }catch(_d){} return 'Expenses (duplicate skipped)'; }
+  if (GEMINI_API_KEY && photo && (!details.vendor || !details.total)) { try { var _o=EV_ocrReceipt_(photo); if(_o){ details.vendor=details.vendor||_o.vendor; details.total=details.total||_o.total; details.category=details.category||_o.category; details.what=details.what||_o.items; details.gst=details.gst||_o.gst; details.date=details.date||_o.date; } } catch(_x){} } // OCR pre-fill (gated)
+  if (EV_isDupReceipt_(book, details, sub)) { try{ appLog_('Receipt','Duplicate receipt skipped: '+(details.vendor||'')+' $'+(details.total||'')+' '+(details.date||'')); }catch(_d){} return 'Expenses (duplicate skipped)'; }
+
+  var by=irow[EV_colIndex_(ih,'Captured')];
+  var summary=irow[EV_colIndex_(ih,'Summary')];
+
+  // Bookkeeping date = the PRINTED RECEIPT date. If missing/impossible (future), fall back to the
+  // submission date but FLAG it (A-4) so a wrong-month spend date is never booked silently.
+  var _rcptD = EV_toDate_(details.date);
+  var _future = (_rcptD instanceof Date) && _rcptD.getTime() > EV_now_().getTime()+86400000;
+  var _dateOk = (_rcptD instanceof Date && !_future);
+  var _useDate = _dateOk ? _rcptD : EV_toDate_(irow[0]);
+  var _dateFlag = _dateOk ? '' : ('receipt date '+(details.date?('"'+details.date+'" '):'')+'missing/invalid — used capture date, verify');
+
+  // FINANCIAL GATE (A-2): if the total is missing, zero, implausible, or fails the subtotal+GST
+  // check, HOLD the receipt OUT of Expenses/P&L. Record it once in the Receipt Log with the issue
+  // (so the 3-day report surfaces it) and leave the inbox NEEDS REVIEW. A wrong number never books.
+  var _fin = EV_receiptFinancialIssue_(details);
+  if (_fin) {
+    // Record (upsert by Submission ID) a HELD row in the Receipt Log so the issue is visible, but keep
+    // it OUT of Expenses/P&L. When the receipt is later corrected, the booking path upserts the SAME
+    // row to the correct values — the ledger never ends up with a stale wrong row.
+    EV_upsertReceiptLog_(book, sub, [ _useDate, EV_safeCell_(details.vendor||details.where||details.store||''),
+      EV_safeCell_(details.category||details.about||'Field App'), '', EV_safeCell_(details.gst||details.tax||''),
+      EV_safeCell_(details.total||''), '', EV_safeCell_(details.item||details.what||summary||''), '', '', '',
+      sub, EV_safeCell_(EV_cleanLink_(String(photo||'').split('\n')[0])), EV_safeCell_(by||''),
+      'HELD — '+_fin+(_dateFlag?(' · '+_dateFlag):''), EV_fmtNow_() ]);
+    try { appLog_('Receipt','Receipt HELD out of Expenses ('+(details.vendor||'?')+' $'+(details.total||'?')+'): '+_fin); } catch(_e){}
+    return null; // -> inbox stays NEEDS REVIEW (surfaced by sweep/digest); no wrong number on the books
+  }
+
+  // Idempotency (B-3/D-1): if this submission is already in Expenses, never write it twice.
+  if (EV_subAlreadyFiled_(book, 'Expenses', sub)) return 'Expenses (already filed '+sub+')';
+
   var exp=EV_sheetEndingWith_(book,'Expenses');
   var lastCol=exp.getLastColumn();
   var scanN=Math.min(20, exp.getMaxRows());
   var scan=exp.getRange(1,1,scanN,lastCol).getValues();
-  var hr=-1, eh=null;
-  for(var r=0;r<scan.length;r++){
-    var low=scan[r].map(function(x){return String(x).toLowerCase();});
-    if(low.indexOf('date')>=0 && low.join('|').indexOf('vendor')>=0){ hr=r+1; eh=scan[r]; break; }
-  }
-  if(hr<0){ hr=1; eh=scan[0]; }
+  var _h=EV_headerIndex_(scan,['date','vendor','total']);   // header by signature (E-1)
+  var hr=(_h<0?1:_h+1), eh=scan[hr-1];
   function gi(n){ return EV_colIndex_(eh,n); }
   var totalCol=gi('Total');
   var footer=-1;
@@ -996,57 +1032,49 @@ function EV_fileExpense_(book, irow, ih, details, photo, sub){
     if(blank){ target=r3; break; }
   }
   if(target<0){ exp.insertRowBefore(footer); target=footer; }
+
+  // Receipt -> job link (B-2): tag the Job ID so per-job cost roll-up is possible.
+  var _jobId = EV_matchJobId_(book, details, _useDate);
+
   var rowArr=new Array(lastCol).fill('');
   function put(name,val){ var k=gi(name); if(k>=0) rowArr[k]=EV_safeCell_(val); }
-  var by=irow[EV_colIndex_(ih,'Captured')];
-  var summary=irow[EV_colIndex_(ih,'Summary')];
-  // Bookkeeping date = the PRINTED RECEIPT date (details.date), not the submission timestamp.
-  // If it is missing or impossible (future), fall back to the submission date and let the
-  // verifier flag it in the Receipt Log Issue column rather than fabricating a real spend date.
-  var _rcptD = EV_toDate_(details.date);
-  var _future = (_rcptD instanceof Date) && _rcptD.getTime() > EV_now_().getTime()+86400000;
-  var _useDate = (_rcptD instanceof Date && !_future) ? _rcptD : EV_toDate_(irow[0]);
   put('Date', _useDate);
   put('Purchased by', by);
   put('What was purchased', details.item||details.what||details.purchased||summary||'');
   put('Vendor', details.vendor||details.where||details.store||'');
-  put('Why', details.job||details.reference||details.why||details.notes||'');
+  put('Why', details.job||details.reference||details.why||_jobId||details.notes||'');
   put('Category', details.category||details.about||'Field App');
   put('Qty', details.qty||details.quantity||'');
   put('Unit cost', details.unit||details.unitCost||'');
   put('Total', EV_findAmount_(details));
-  put('Description', String(summary||'')+' | SubID:'+sub+(photo?(' | Photo:'+photo):'')+' | auto-filed '+EV_fmtNow_());
+  put('Description', EV_withSub_(String(summary||'')+(photo?(' | Photo:'+photo):'')+(_jobId?(' | Job:'+_jobId):'')+' | auto-filed '+EV_fmtNow_(), sub));
   exp.getRange(target,1,1,lastCol).setValues([rowArr]);
 
-  // Verify typed values (deterministic — future date, math, sane total; no AI key / no OCR quota)
-  // and mirror into the QuickBooks-ready 📒 Receipt Log. Best-effort — never block the filing above.
+  // Verify typed values (deterministic) and mirror into the QuickBooks-ready 📒 Receipt Log
+  // (idempotent on the Submission ID). Best-effort — never blocks the Expenses write above.
   var _issue=''; try { _issue=EV_verifyReceipt_(details); } catch(_v){}
+  if(_dateFlag) _issue=(_issue?(_issue+'; '):'')+_dateFlag;
   var _total=EV_findAmount_(details);
-  var _gst=parseFloat(String(details.gst||details.tax||'').replace(/[^0-9.]/g,''));
+  var _gst=EV_amount_(details.gst!=null?details.gst:details.tax);
   var _sub=(!isNaN(_gst) && typeof _total==='number') ? (_total-_gst).toFixed(2) : '';
-  try {
-    var rl = EV_sheetEndingWith_(book, 'Receipt Log');
-    if (rl) {
-      rl.appendRow([
-        _useDate,                                                                  // Date (printed receipt date)
-        EV_safeCell_(details.vendor||details.where||details.store||''),            // Vendor
-        EV_safeCell_(details.category||details.about||'Field App'),                // Category
-        _sub,                                                                      // Subtotal (Total − GST)
-        EV_safeCell_(details.gst||details.tax||''),                                // GST/Tax
-        _total,                                                                    // Total
-        EV_safeCell_(details.payment||details.method||details.paidWith||''),       // Payment method
-        EV_safeCell_(details.item||details.what||details.purchased||summary||''),  // Line items
-        EV_safeCell_(details.qty||details.quantity||''),                           // Qty
-        EV_safeCell_(details.unit||details.unitCost||''),                          // Unit price
-        EV_safeCell_(details.job||details.reference||details.why||details.notes||''),// Job/reason
-        sub,                                                                       // Source (Inbox ID)
-        EV_safeCell_(String(photo||'').split('\n')[0].replace(/^[^:]+:\s*/,'')),   // Photo link (first, de-tagged)
-        EV_safeCell_(by||''),                                                      // Filed by
-        EV_safeCell_(_issue),                                                      // Issue/discrepancy
-        EV_fmtNow_()                                                               // Created
-      ]);
-    }
-  } catch (_rl) { try { appLog_('Receipt','Receipt Log mirror failed for '+sub+': '+_rl); } catch(_e){} }
+  EV_upsertReceiptLog_(book, sub, [
+    _useDate,                                                                  // Date (printed receipt date)
+    EV_safeCell_(details.vendor||details.where||details.store||''),            // Vendor
+    EV_safeCell_(details.category||details.about||'Field App'),                // Category
+    _sub,                                                                      // Subtotal (Total − GST)
+    EV_safeCell_(details.gst||details.tax||''),                                // GST/Tax
+    _total,                                                                    // Total
+    EV_safeCell_(details.payment||details.method||details.paidWith||''),       // Payment method
+    EV_safeCell_(details.item||details.what||details.purchased||summary||''),  // Line items
+    EV_safeCell_(details.qty||details.quantity||''),                           // Qty
+    EV_safeCell_(details.unit||details.unitCost||''),                          // Unit price
+    EV_safeCell_(_jobId||details.job||details.reference||details.why||details.notes||''), // Job/reason (Job ID link)
+    sub,                                                                       // Source (Inbox ID)
+    EV_safeCell_(EV_cleanLink_(String(photo||'').split('\n')[0])),             // Photo link (first, de-tagged)
+    EV_safeCell_(by||''),                                                      // Filed by
+    EV_safeCell_(_issue),                                                      // Issue/discrepancy
+    EV_fmtNow_()                                                               // Created
+  ]);
 
   // Canonical vendor roll-up — populates the Vendors tab + de-typos the spend brain.
   try { EV_upsertVendor_(book, details.vendor||details.where||details.store||'', details.category||details.about||'', _total, EV_toDate_(irow[0])); } catch(_uv){}
@@ -1081,6 +1109,14 @@ function EV_fileInbox_(){
     var photo=String(data[r][cPhoto]||'');
     var dest=EV_routeDest_(cat,det,summary);
     try{
+      var _suffix = (dest==='Quote') ? 'Quotes' : dest;
+      // Idempotency (B-3/D-1): if this submission already reached the destination tab, never re-file.
+      if(dest!=='REVIEW' && sub && EV_subAlreadyFiled_(book,_suffix,sub)){
+        inbox.getRange(r+1,cStatus+1).setValue('FILED');
+        if(cFiled>=0) inbox.getRange(r+1,cFiled+1).setValue(_suffix+' (already filed)');
+        if(cNotes>=0) inbox.getRange(r+1,cNotes+1).setValue('Already filed to '+_suffix+' — skipped duplicate '+EV_fmtNow_());
+        filed++; notes.push(sub+'->dup-skip'); continue;
+      }
       var ref = (dest==='REVIEW') ? null : EV_fileByDest_(book,dest,data[r],ih,det,photo,sub,summary);
       if(ref){
         inbox.getRange(r+1,cStatus+1).setValue('FILED');
@@ -1088,8 +1124,14 @@ function EV_fileInbox_(){
         if(cNotes>=0) inbox.getRange(r+1,cNotes+1).setValue('Auto-filed to '+ref+' '+EV_fmtNow_());
         filed++; notes.push(sub+'->'+ref);
       } else {
+        // Nothing dead-ends (C-1): a capture we can't confidently place still reaches a book — raise a
+        // "review & file" To-Do ONCE (only on first encounter, while the row is still NEW), tagged with
+        // NO submission id so it can never block a genuine To-Do for the same capture if it's reclassified.
+        if(dest==='REVIEW' && stt==='NEW'){
+          try{ EV_fileTodo_(book,{task:'Review & file capture: '+(summary||cat),category:'Needs review',priority:'Medium',notes:'Unclassified field capture ('+cat+'). Open the App Inbox row to file it.'},summary,''); }catch(_t){}
+        }
         if(stt!=='NEEDS REVIEW') inbox.getRange(r+1,cStatus+1).setValue('NEEDS REVIEW');
-        if(cNotes>=0) inbox.getRange(r+1,cNotes+1).setValue('Needs human/Claude — '+cat+' '+EV_fmtNow_());
+        if(cNotes>=0) inbox.getRange(r+1,cNotes+1).setValue('Needs human/Claude — '+cat+(dest==='REVIEW'?' (review To-Do raised)':'')+' '+EV_fmtNow_());
         review++; notes.push(sub+'->REVIEW');
       }
     }catch(err){

@@ -91,32 +91,36 @@ function EV_existsInTab_(book, suffix, headerKey, value){
 // ---------------------------------------------------------------------------
 //  PER-CATEGORY FILERS  (deterministic, safe simple-table tabs)
 // ---------------------------------------------------------------------------
-function EV_fileLead_(book, det, summary){
-  if(!EV_existsInTab_(book,'Leads','Phone',det.phone) || !det.phone){
-    return EV_appendToTab_(book,'Leads',['lead','status','next action'],{
-      'Date in': EV_today_(), 'Lead': det.lead||det.company||det.name||summary||'',
-      'Contact': det.contact||'', 'Phone': det.phone||det.email||'', 'Source': det.source||'Field app',
-      'Service wanted': det.service||'', 'Address': det.address||'', 'Status': 'New',
-      'Next action': 'Contact within 24h', 'Next action date': EV_tomorrow_(), 'Notes': det.notes||''
-    });
-  }
-  return 'Leads (already present)';
+function EV_fileLead_(book, det, summary, sub){
+  var name=det.lead||det.company||det.name||summary||'';
+  // Dedup on phone; if no phone, fall back to the lead name (D-2) so a phone-less repeat isn't duplicated.
+  var dup = (det.phone && EV_existsInTab_(book,'Leads','Phone',det.phone)) ||
+            (!det.phone && name && EV_existsInTab_(book,'Leads','Lead',name));
+  if(dup) return 'Leads (already present)';
+  return EV_appendToTab_(book,'Leads',['lead','status','next action'],{
+    'Date in': EV_today_(), 'Lead': name,
+    'Contact': det.contact||'', 'Phone': det.phone||det.email||'', 'Source': det.source||'Field app',
+    'Service wanted': det.service||'', 'Address': det.address||'', 'Status': 'New',
+    'Next action': 'Contact within 24h', 'Next action date': EV_tomorrow_(), 'Notes': EV_withSub_(det.notes||'', sub)
+  });
 }
-function EV_fileCustomer_(book, det, summary){
+function EV_fileCustomer_(book, det, summary, sub){
   var name=det.customer||det.client||det.name||summary||'';
   if(EV_existsInTab_(book,'Customers','Customer',name)) return 'Customers (already present)';
   return EV_appendToTab_(book,'Customers',['customer','contact','status'],{
     'Customer': name, 'Contact': det.contact||'', 'Phone': det.phone||'', 'Email': det.email||'',
-    'Address': det.address||'', 'Type': det.type||'', 'Status': det.status||'Active', 'Notes': det.notes||''
+    'Address': det.address||'', 'Type': det.type||'', 'Quote no': det.quote||det.qno||'',  // B-1: carry the quote key
+    'Status': det.status||'Active', 'Notes': EV_withSub_(det.notes||'', sub)
   });
 }
-function EV_fileDispatch_(book, det, summary){
+function EV_fileDispatch_(book, det, summary, sub){
   return EV_appendToTab_(book,'Dispatch',['customer','crew','status'],{
     'Date': det.date||'', 'Time': det.time||'', 'Customer': det.customer||summary||'',
-    'Address': det.address||'', 'Crew': det.crew||'', 'Status': det.status||'Booked', 'Notes': det.notes||''
+    'Quote no': det.quote||det.qno||'', 'Address': det.address||'', 'Crew': det.crew||'',
+    'Status': det.status||'Booked', 'Notes': EV_withSub_(det.notes||'', sub)
   });
 }
-function EV_fileTodo_(book, det, summary){
+function EV_fileTodo_(book, det, summary, sub){
   var sh=EV_sheetEndingWith_(book,'To-Do'); if(!sh) return null;
   var lastRow=sh.getLastRow(), nextNum=1;
   if(lastRow>=1){ var colA=sh.getRange(1,1,lastRow,1).getValues(); for(var i=0;i<colA.length;i++){ var n=parseInt(colA[i][0],10); if(!isNaN(n)&&n>=nextNum) nextNum=n+1; } }
@@ -124,35 +128,37 @@ function EV_fileTodo_(book, det, summary){
     '#': nextNum, 'Task': det.task||det.description||summary||'',
     'Category': det.category||(det.request_type?('Request: '+det.request_type):'Field app'),
     'Priority': det.priority||'Medium', 'Status': 'Open', 'Date added': EV_today_(),
-    'Due date': det.due||'', 'Notes': det.notes||''
+    'Due date': det.due||'', 'Notes': EV_withSub_(det.notes||'', sub)
   });
 }
-function EV_fileSupplier_(book, det, summary){
+function EV_fileSupplier_(book, det, summary, sub){
   if(EV_existsInTab_(book,'Suppliers','Supplier',det.supplier)) return 'Suppliers (already present)';
   return EV_appendToTab_(book,'Suppliers',['supplier','location'],{
     'Supplier': det.supplier||summary||'', 'Location': det.location||'', 'Local': det.localonline||'',
     'Phone': det.phone||'', 'Website': det.website||'', 'Products': det.products||'',
-    'Last known pricing': det.pricing||'', 'Notes': det.notes||''
+    'Last known pricing': det.pricing||'', 'Notes': EV_withSub_(det.notes||'', sub)
   });
 }
-function EV_filePriceLog_(book, det, summary){
+function EV_filePriceLog_(book, det, summary, sub){
   return EV_appendToTab_(book,'Price Log',['supplier','product','unit price'],{
     'Date': EV_today_(), 'Supplier': det.supplier||'', 'Product name': det.product||'', 'Brand': det.brand||'',
     'Category': det.category||'', 'Package size': det.size||'', 'Qty': det.qty||'',
-    'Unit price': det.unitprice||'', 'Total paid': det.total||'', 'Invoice': det.invoice||'', 'Notes': det.notes||''
+    'Unit price': det.unitprice||'', 'Total paid': det.total||'', 'Invoice': det.invoice||'', 'Notes': EV_withSub_(det.notes||'', sub)
   });
 }
-function EV_fileJobIndex_(book, det, summary, photo){
+function EV_fileJobIndex_(book, det, summary, photo, sub){
+  // Keep EVERY photo link (B-6), de-tagged safely (never eats a bare https:// URL).
+  var links=String(photo||'').split('\n').map(function(s){return EV_cleanLink_(s);}).filter(String).join(' | ');
   return EV_appendToTab_(book,'File Index',['type','drive','related'],{
     'Date': EV_today_(), 'Type': 'Job photo',
     'Description': summary||det.customer||det.surface||'',
-    'Drive link': String(photo||'').split('\n')[0].replace(/^[^:]+:\s*/,''),
-    'Related to': det.customer||'', 'Notes': det.notes||det.stage||''
+    'Drive link': links,
+    'Related to': det.customer||'', 'Notes': EV_withSub_(det.notes||det.stage||'', sub)
   });
 }
 
 /** Field quote -> price it deterministically + write Quotes row + mirror Customers. PDF/email = next step. */
-function EV_fileQuote_(book, det, summary){
+function EV_fileQuote_(book, det, summary, sub){
   var rates={'very light brush':2.50,'very light':2.50,'light':3.75,'medium':6.90,'heavy':14.50,'exposed-aggregate':6.90,'exposed aggregate':6.90};
   var sqft=parseFloat(String(det.sqft||'').replace(/[^0-9.]/g,''))||0, subtotal=0;
   if(/set the price/i.test(String(det.pricing_method||''))){ subtotal=parseFloat(String(det.custom_price||'').replace(/[^0-9.]/g,''))||0; }
@@ -168,9 +174,10 @@ function EV_fileQuote_(book, det, summary){
     'Subtotal': subtotal.toFixed(2), 'GST': gst.toFixed(2), 'Total': total.toFixed(2),
     'Deposit': deposit.toFixed(2), 'Balance': balance.toFixed(2),
     'Status': 'Priced by app — PDF/email pending', 'Valid until': EV_fmt_(new Date(EV_now_().getTime()+30*86400000),'yyyy-MM-dd'),
-    'Prepared by': 'Field app', 'Sq ft': sqft||'', 'Blast depth': det.depth||'', 'Notes': det.notes||''
+    'Prepared by': 'Field app', 'Sq ft': sqft||'', 'Blast depth': det.depth||'', 'Notes': EV_withSub_(det.notes||'', sub)
   });
-  try{ EV_fileCustomer_(book,{customer:det.customer||det.client,phone:det.phone,address:det.address,status:'Quoted',notes:'From quote '+qno},summary); }catch(e){}
+  // B-1: propagate the Quote No. forward as a key onto the mirrored Customer (and Lead, if present).
+  try{ EV_fileCustomer_(book,{customer:det.customer||det.client,phone:det.phone,address:det.address,quote:qno,status:'Quoted',notes:'From quote '+qno},summary,sub); }catch(e){}
   return ref ? (qno) : null;
 }
 
@@ -213,18 +220,21 @@ function EV_verifyReceipt_(det){
   return issues.join('; ');
 }
 
-/** Hard-duplicate guard: same vendor(canon)+total+date(±1d) already in Receipt Log. */
-function EV_isDupReceipt_(book, det){
+/** Hard-duplicate guard: same vendor(canon)+total+date(±2d) already in Receipt Log.
+ *  Skips the submission's OWN row (Source col 12 === sub) so a held-then-corrected receipt
+ *  is never mistaken for a duplicate of the HELD row it just wrote. */
+function EV_isDupReceipt_(book, det, sub){
   try{
     var rl=EV_sheetEndingWith_(book,'Receipt Log'); if(!rl) return false;
     var lastRow=rl.getLastRow(); if(lastRow<2) return false;
-    var v=rl.getRange(2,1,lastRow-1,6).getValues(); // Date,Vendor,Category,Subtotal,GST,Total
+    var v=rl.getRange(2,1,lastRow-1,12).getValues(); // Date,Vendor,Category,Subtotal,GST,Total,...,Source(12)
     var key=EV_norm_(det.vendor||det.where||det.store||'');
-    var tot=parseFloat(String(det.total||'').replace(/[^0-9.]/g,''));
+    var tot=EV_amount_(det.total);
     var d=EV_toDate_(det.date);
     for(var i=0;i<v.length;i++){
+      if(sub && String(v[i][11])===String(sub)) continue;   // never dup against this submission's own row
       if(EV_norm_(v[i][1])!==key) continue;
-      var t2=parseFloat(String(v[i][5]).replace(/[^0-9.]/g,''));
+      var t2=EV_amount_(v[i][5]);
       if(isNaN(tot)||isNaN(t2)||Math.abs(tot-t2)>0.5) continue;
       var d2=EV_toDate_(v[i][0]);
       if(d instanceof Date && d2 instanceof Date && Math.abs(d.getTime()-d2.getTime())<=2*86400000) return true;
@@ -263,14 +273,14 @@ function EV_routeDest_(cat, det, summary){
 function EV_fileByDest_(book, dest, irow, ih, det, photo, sub, summary){
   switch(dest){
     case 'Expenses':  return EV_fileExpense_(book, irow, ih, det, photo, sub);
-    case 'Leads':     return EV_fileLead_(book, det, summary);
-    case 'Customers': return EV_fileCustomer_(book, det, summary);
-    case 'Dispatch':  return EV_fileDispatch_(book, det, summary);
-    case 'To-Do':     return EV_fileTodo_(book, det, summary);
-    case 'Suppliers': return EV_fileSupplier_(book, det, summary);
-    case 'Price Log': return EV_filePriceLog_(book, det, summary);
-    case 'File Index':return EV_fileJobIndex_(book, det, summary, photo);
-    case 'Quote':     return EV_fileQuote_(book, det, summary);
+    case 'Leads':     return EV_fileLead_(book, det, summary, sub);
+    case 'Customers': return EV_fileCustomer_(book, det, summary, sub);
+    case 'Dispatch':  return EV_fileDispatch_(book, det, summary, sub);
+    case 'To-Do':     return EV_fileTodo_(book, det, summary, sub);
+    case 'Suppliers': return EV_fileSupplier_(book, det, summary, sub);
+    case 'Price Log': return EV_filePriceLog_(book, det, summary, sub);
+    case 'File Index':return EV_fileJobIndex_(book, det, summary, photo, sub);
+    case 'Quote':     return EV_fileQuote_(book, det, summary, sub);
   }
   return null;
 }
@@ -311,7 +321,7 @@ function EV_backfillReceiptLog_(book){
     var vendor=String((ciVendor>=0?ev[rr][ciVendor]:'')||''), total=ciTotal>=0?ev[rr][ciTotal]:'';
     if(!sub || seen[sub]) continue;
     var pm=desc.match(/Photo:\s*([^|]+)/), photo=pm?pm[1].trim():'';
-    rl.appendRow([ (ciDate>=0?ev[rr][ciDate]:'')||'', vendor, (ciCat>=0?ev[rr][ciCat]:'')||'', '', '', total||'', '', (ciWhat>=0?ev[rr][ciWhat]:'')||'', '', '', '', sub, photo, (ciBy>=0?ev[rr][ciBy]:'')||'', '', EV_fmtNow_() ]);
+    rl.appendRow([ (ciDate>=0?ev[rr][ciDate]:'')||'', vendor, (ciCat>=0?ev[rr][ciCat]:'')||'', '', '', total||'', '', (ciWhat>=0?ev[rr][ciWhat]:'')||'', '', '', '', sub, photo, (ciBy>=0?ev[rr][ciBy]:'')||'', 'Backfilled from Expenses — GST/subtotal unverified', EV_fmtNow_() ]);
     seen[sub]=true; added++;
   }
   return added;

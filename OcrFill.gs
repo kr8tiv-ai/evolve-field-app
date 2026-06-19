@@ -104,21 +104,12 @@ function EV_parseReceipt_(text) {
            text.match(/\b((?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\.?\s+\d{1,2},?\s+20\d{2})\b/i);
   if (dm) out.date = EV_isoDate_(dm[1]) || dm[1];
 
-  // Total: prefer an amount near a total keyword (allow a small gap incl. a newline),
-  // then the largest $-prefixed amount, then the largest bare decimal.
-  var amts = [], re = /(?:grand total|amount due|balance due|total)\b[^0-9$]{0,25}\$?\s*([0-9]{1,5}[.,][0-9]{2})/ig, m;
-  while ((m = re.exec(text))) { amts.push(parseFloat(m[1].replace(',', '.'))); }
-  if (amts.length) out.total = Math.max.apply(null, amts).toFixed(2);
-  else {
-    var all = [], re2 = /\$\s*([0-9]{1,5}[.,][0-9]{2})/g, mm;
-    while ((mm = re2.exec(text))) all.push(parseFloat(mm[1].replace(',', '.')));
-    if (!all.length) { var re3 = /(?:^|\s)([0-9]{1,5}[.,][0-9]{2})(?:\s|$)/g, m3; while ((m3 = re3.exec(text))) all.push(parseFloat(m3[1].replace(',', '.'))); }
-    if (all.length) out.total = Math.max.apply(null, all).toFixed(2);
-  }
-
-  var gm = text.match(/\b(?:g\.?s\.?t|h\.?s\.?t)\b\s*(?:\d{1,2}\s*%)?[^0-9$]{0,40}\$?\s*([0-9]{1,4}[.,][0-9]{2})/i) ||
-           text.match(/\btax\b\s*(?:\d{1,2}\s*%)?[^0-9$]{0,14}\$?\s*([0-9]{1,4}[.,][0-9]{2})/i);
-  if (gm) out.gst = parseFloat(gm[1].replace(',', '.')).toFixed(2);
+  // Total + GST via the robust money parser (Hardening.gs): thousands separators
+  // are handled, so a $1,250.00 total reads as 1250.00 (never 1.25), the grand
+  // total wins over line items, and subtotal/tax/change lines are not mistaken
+  // for the total.
+  out.total = EV_pickTotal_(lines);
+  out.gst   = EV_pickGst_(lines);
   return out;
 }
 
