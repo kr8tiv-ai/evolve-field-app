@@ -29,10 +29,12 @@ const MAP = [
   ['YOUR_06_TEMPLATES_FOLDER_ID', '13FpiUbt6YvFCa9JZL4fCmYBuy2E7k3UB'],
   ['YOUR_07_MANUALS_FOLDER_ID', '15OqnLEQywpszsGFiC_JxQ_4yeVLG7Ak5'],
   ['manager@yourcompany.com', 'lucidbloks@gmail.com'],
+  // Drive intake drop folder -> Todd's "Evolve temp" pile (repoint anytime; this clears the backlog).
+  ['YOUR_DROP_FOLDER_ID', '1reWd-k9dCERYWVI9vvw2qMUsOHTXu38_'],
 ];
 
-const FILES = ['Code.gs', 'AutoServer.gs', 'Filing.gs', 'OcrFill.gs', 'Hardening.gs',
-  'ReceiptOps.gs', 'Backups.gs', 'FeedHistory.gs', 'Index.html', 'appsscript.json'];
+const FILES = ['Code.gs', 'AutoServer.gs', 'Filing.gs', 'OcrFill.gs', 'Hardening.gs', 'Intelligence.gs',
+  'DriveIntake.gs', 'ReceiptOps.gs', 'Backups.gs', 'FeedHistory.gs', 'Index.html', 'appsscript.json'];
 
 if (!fs.existsSync(OUT)) fs.mkdirSync(OUT, { recursive: true });
 let remaining = 0;

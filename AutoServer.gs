@@ -379,6 +379,7 @@ function EV_buildMorningDigestHtml_() {
 
   // ----- BUSINESS BRAIN + YESTERDAY RECAP + WHAT WE SHIPPED (each returns '' if no data) -----
   H.push(EV_brainCard_());
+  H.push(EV_biDashboardCard_());
   H.push(EV_capturedCard_());
   H.push(EV_activityCard_());
   H.push(EV_upgradesCard_());
@@ -607,7 +608,8 @@ function EV_dispatchSweep() {
   try { EV_fileInbox_(); } catch(_e){} // hook: server-side inbox filing (added 2026-06-13, Claude)
   try { EV_rollupJobCosts_(); } catch(_jr){} // B-2: recompute per-job actual costs from receipts (idempotent)
   try { EV_raiseSweepActionItems_(); } catch(_ai){} // B-4: raise money-loop Action Items, deduped by key
-  try { EV_generateInsights(); } catch(_ei){} // hook: refresh business-brain insights
+  try { EV_generateInsights(); } catch(_ei){} // hook: refresh business-brain insights (prunes "New" rows first)
+  try { EV_intelligenceSweep_(); } catch(_is){} // BI: runs AFTER generateInsights so its insights aren't pruned
   try {
     var findings = EV_sweepFindings_();
     var when = EV_fmt_(EV_now_(), 'HH:mm');
@@ -1055,14 +1057,18 @@ function EV_fileExpense_(book, irow, ih, details, photo, sub){
   var _issue=''; try { _issue=EV_verifyReceipt_(details); } catch(_v){}
   if(_dateFlag) _issue=(_issue?(_issue+'; '):'')+_dateFlag;
   var _total=EV_findAmount_(details);
-  var _gst=EV_amount_(details.gst!=null?details.gst:details.tax);
-  var _sub=(!isNaN(_gst) && typeof _total==='number') ? (_total-_gst).toFixed(2) : '';
+  // Separate GST on EVERY receipt: use typed/OCR'd subtotal+GST if present, else back-compute at the
+  // Alberta 5% rate (flagged estimated) so the Receipt Log is QuickBooks/tax-ready, never blank.
+  var _g = (typeof EV_ensureGst_==='function') ? EV_ensureGst_(details) : null;
+  var _sub = _g ? _g.subtotal : '';
+  var _gstVal = _g ? _g.gst : EV_safeCell_(details.gst||details.tax||'');
+  if (_g && _g.estimated) _issue = (_issue?(_issue+'; '):'') + 'GST estimated (5% incl.)';
   EV_upsertReceiptLog_(book, sub, [
     _useDate,                                                                  // Date (printed receipt date)
     EV_safeCell_(details.vendor||details.where||details.store||''),            // Vendor
     EV_safeCell_(details.category||details.about||'Field App'),                // Category
-    _sub,                                                                      // Subtotal (Total − GST)
-    EV_safeCell_(details.gst||details.tax||''),                                // GST/Tax
+    _sub,                                                                      // Subtotal (Total − GST, separated/estimated)
+    _gstVal,                                                                   // GST/Tax (separated/estimated)
     _total,                                                                    // Total
     EV_safeCell_(details.payment||details.method||details.paidWith||''),       // Payment method
     EV_safeCell_(details.item||details.what||details.purchased||summary||''),  // Line items
