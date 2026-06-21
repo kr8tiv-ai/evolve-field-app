@@ -614,6 +614,7 @@ function EV_dispatchSweep() {
   try { EV_generateInsights(); } catch(_ei){} // hook: refresh business-brain insights (prunes "New" rows first)
   try { EV_intelligenceSweep_(); } catch(_is){} // BI: runs AFTER generateInsights so its insights aren't pruned
   try { EV_ensureDriveIntake_(); } catch(_di){} // self-install the loose-receipt Drive intake trigger if missing (no editor needed)
+  try { EV_ensureReplyMonitor_(); } catch(_rm){} // self-install the hourly reply monitor trigger if missing (runs once Gmail is consented)
   try {
     var findings = EV_sweepFindings_();
     var when = EV_fmt_(EV_now_(), 'HH:mm');
@@ -820,6 +821,16 @@ function EV_routeReplyItem_(book, text, from) {
 
 function EV_getLabel_(name) {
   return GmailApp.getUserLabelByName(name) || GmailApp.createLabel(name);
+}
+
+/** Install ONLY the hourly reply-monitor trigger if it's missing (does NOT re-add the personal
+ *  digest, which a parallel session intentionally removed). The monitor no-ops until Gmail is
+ *  consented; run EV_replyMonitor once in the editor and click Allow to grant gmail.modify. */
+function EV_ensureReplyMonitor_() {
+  var has = ScriptApp.getProjectTriggers().some(function (t) { return t.getHandlerFunction() === 'EV_replyMonitor'; });
+  if (has) return;
+  ScriptApp.newTrigger('EV_replyMonitor').timeBased().everyHours(1).create();
+  try { appLog_('Autopilot', 'Self-installed hourly reply monitor trigger.'); } catch (e) {}
 }
 
 // ---------------------------------------------------------------------------
