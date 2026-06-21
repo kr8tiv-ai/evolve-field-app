@@ -613,6 +613,7 @@ function EV_dispatchSweep() {
   try { EV_raiseSweepActionItems_(); } catch(_ai){} // B-4: raise money-loop Action Items, deduped by key
   try { EV_generateInsights(); } catch(_ei){} // hook: refresh business-brain insights (prunes "New" rows first)
   try { EV_intelligenceSweep_(); } catch(_is){} // BI: runs AFTER generateInsights so its insights aren't pruned
+  try { EV_ensureDriveIntake_(); } catch(_di){} // self-install the loose-receipt Drive intake trigger if missing (no editor needed)
   try {
     var findings = EV_sweepFindings_();
     var when = EV_fmt_(EV_now_(), 'HH:mm');

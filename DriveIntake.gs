@@ -29,6 +29,17 @@ var EV_DRIVE_INTAKE = {
 
 function EV_driveIntakeNow() { return EV_driveIntake_(); }
 
+/** Install the hourly Drive intake trigger if missing (called from the dispatch sweep so the
+ *  loose-receipt loop self-starts without an editor visit). Runs one pass on first install. */
+function EV_ensureDriveIntake_() {
+  if (String(EV_DRIVE_INTAKE.FOLDER_ID).indexOf('YOUR_') === 0) return; // not configured
+  var has = ScriptApp.getProjectTriggers().some(function (t) { return t.getHandlerFunction() === 'EV_driveIntake_'; });
+  if (has) return;
+  ScriptApp.newTrigger('EV_driveIntake_').timeBased().everyHours(1).create();
+  try { appLog_('DriveIntake', 'Self-installed hourly Drive intake trigger.'); } catch (e) {}
+  try { EV_driveIntake_(); } catch (e) {} // first pass immediately
+}
+
 function EV_installDriveIntake() {
   if (String(EV_DRIVE_INTAKE.FOLDER_ID).indexOf('YOUR_') === 0) throw new Error('Set EV_DRIVE_INTAKE.FOLDER_ID to the drop folder first.');
   ScriptApp.getProjectTriggers().forEach(function (t) { if (t.getHandlerFunction() === 'EV_driveIntake_') ScriptApp.deleteTrigger(t); });
