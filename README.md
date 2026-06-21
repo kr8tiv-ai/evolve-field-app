@@ -28,6 +28,20 @@ It is the difference between *"we have a spreadsheet"* and *"the spreadsheet run
 
 ---
 
+## What's new — hardened, intelligent, fail‑safe (2026‑06)
+
+A multi‑pass hardening + intelligence upgrade (branch `harden/data-integrity` → deploy with [`GO-LIVE.md`](GO-LIVE.md)):
+
+- **Books correct to the cent.** A rewritten receipt money parser fixes a silent under‑count (a `$1,250.00` total was reading as `1.25`); anything it can't read confidently is **HELD out of Expenses/P&L** instead of booked wrong. **GST is now auto‑separated** on every receipt (Alberta 5%), so the ledger is tax‑ready.
+- **Never lose a capture, never duplicate one.** Atomic photo handling, an honest offline‑save, and a Submission‑ID on every filed row make every filer idempotent.
+- **Per‑job profitability + cash flow.** Job P&L is seeded from accepted quotes and auto‑computes profit / margin / $‑per‑sqft; the morning digest gains a **📊 Business Intelligence** dashboard (win rate, AR, quote accuracy, top customers, vendor price‑move alerts).
+- **Loose receipts work for you.** A **Drive intake** OCRs a drop‑folder of receipt photos straight into the books.
+- **Quiet, correct notifications.** The owner gets **only the morning digest + app‑requested items**; everything operational goes to the operator. And email **replies are classified and routed** back into the system as approvals, fixes, requests, or corrections.
+
+Every change is deterministic, free, and proven by ~90 Node assertions (`tests/`). New modules: `Hardening.gs`, `Intelligence.gs`, `DriveIntake.gs`. Details: [`HARDENING.md`](HARDENING.md) · [`INTELLIGENCE.md`](INTELLIGENCE.md).
+
+---
+
 ## What this actually is
 
 Most small trades businesses die by a thousand un-logged receipts. The owner is on a ladder, not at a desk. Data entry is the tax you pay for knowing whether you made money, and nobody pays it on time.
@@ -115,10 +129,11 @@ Everything that *must* be reliable lives on Google's time-driven triggers, so it
 
 | Job | Cadence | What it does |
 |---|---|---|
-| **Morning ops digest** | daily ~7:45 AM | Weather, money loop, open follow-ups, quotes in play, inbox health → emailed to the owner |
-| **Personal daily digest** | daily ~6:00 AM | Today's to-do list, reply-to-add |
-| **Dispatch sweep + insight refresh** | 7 AM · 1 PM · 7 PM | Audits deposit→invoice→paid, overdue items, unfiled inbox; refreshes the 💡 insights; writes a heartbeat; emails only when something needs a human |
-| **Email-reply monitor** | hourly | Reads replies to the digests, turns each line into a logged to-do, and confirms by reply |
+| **Morning ops digest** | daily ~7:45 AM | Weather, money loop, follow-ups, quotes in play, inbox health, **+ a 📊 Business Intelligence dashboard** → emailed to **the owner only** |
+| **Personal daily digest** | daily ~6:00 AM | Today's to-do list, reply-to-add (operator only) |
+| **Dispatch sweep + intelligence** | 7 AM · 1 PM · 7 PM | Audits deposit→invoice→paid, overdue items, unfiled inbox; **separates GST, seeds/computes Job P&L, builds cross-tab BI insights**; raises deduped Action Items; emails **the operator** when something needs a human |
+| **Email-reply monitor** | hourly | Reads replies, **classifies each line (approval / fix / request / correction / done)** and routes it into the system, and confirms by reply |
+| **Loose-receipt Drive intake** | hourly | OCRs receipt photos dropped in a Drive folder → App Inbox → the gated filer |
 | **🛟 System backups** | every 3 days | A full, accident-proof copy of the entire workbook |
 
 > **Note on generations:** `AutoServer.gs` (the `EV_*` functions) is the current autonomy + brain. An earlier generation (`evolve*` functions in `Code.gs`, installed by `evolveInstallTriggers`) is superseded — `EV_installCore()` clears it out. Install the `EV_*` set; don't run both, or digests double-send.
@@ -184,7 +199,11 @@ The Ops Workbook is the irreplaceable structured database for the whole business
 | File | What it is |
 |---|---|
 | [`Code.gs`](Code.gs) | Backend: web-app entry, name+PIN auth, capture → Inbox, one-photo-per-call Drive uploads, the secret-authed router `doPost` API, and the email/digest helpers |
-| [`AutoServer.gs`](AutoServer.gs) | The server-side autonomy layer: time-driven digests, sweeps, reply-monitor, the **Business Brain** (insights + spend + feedback learning), and the optional Gemini OCR/narrative |
+| [`AutoServer.gs`](AutoServer.gs) | The server-side autonomy layer: time-driven digests, sweeps, reply-monitor (now classify-and-route), the **Business Brain**, and the optional Gemini OCR/narrative |
+| [`Hardening.gs`](Hardening.gs) | The integrity layer: robust money parser, financial HOLD gate, Submission-ID idempotency, header-signature detection, reply classification, preflight, secret rotation |
+| [`Intelligence.gs`](Intelligence.gs) | GST auto-separation, Job P&L seed/compute, cross-tab BI insights (win rate, AR, quote accuracy, top customers, price moves), data-quality sweep, digest dashboard |
+| [`DriveIntake.gs`](DriveIntake.gs) | Loose-receipt ingestion — OCRs a Drive drop-folder of receipt photos into the gated filer |
+| [`Filing.gs`](Filing.gs) | The server-side filing engine: routes every inbox capture to the right tab, dedup + vendor canonicalization |
 | [`Backups.gs`](Backups.gs) | The 3-day, accident-proof workbook backup system |
 | [`ReceiptOps.gs`](ReceiptOps.gs) | Router-health alerting + the QuickBooks-ready 📒 Receipt Log and a 3-day receipt-discrepancy report |
 | [`FeedHistory.gs`](FeedHistory.gs) | Total-recall capture feed — `apiCaptureHistory` (paginated, full per-capture detail) for the tappable "Just Captured" view |
@@ -192,7 +211,9 @@ The Ops Workbook is the irreplaceable structured database for the whole business
 | [`Index.html`](Index.html) | The entire branded capture app (UI + logic, runs in a built-in demo mode if opened directly) |
 | [`appsscript.json`](appsscript.json) | Project manifest (OAuth scopes + web-app settings) |
 | [`claude-router-task.md`](claude-router-task.md) | The scheduled Claude agent's playbook — column maps, quoting steps, audit rules |
-| [`DEPLOY.md`](DEPLOY.md) | ~15-minute deployment guide |
+| [`DEPLOY.md`](DEPLOY.md) | ~15-minute from-scratch deployment guide |
+| [`GO-LIVE.md`](GO-LIVE.md) | One paste-and-authorize session to apply the 2026-06 hardening + intelligence update to an existing deployment |
+| [`HARDENING.md`](HARDENING.md) · [`INTELLIGENCE.md`](INTELLIGENCE.md) | What the 2026-06 patches fixed/added, with proof |
 | [`WORKBOOK-SCHEMA.md`](WORKBOOK-SCHEMA.md) | The blank Ops Workbook structure — every tab + columns, no business data |
 | `app-frame/` | The custom-subdomain iframe wrapper + home-screen icon |
 
@@ -208,7 +229,11 @@ The app and brains read/write a single Google Sheets "Ops Workbook." Crew captur
 
 ## Setup
 
-Full guide in [`DEPLOY.md`](DEPLOY.md). In short:
+> **Already running and applying the 2026‑06 update?** Use **[`GO-LIVE.md`](GO-LIVE.md)** — one
+> paste‑and‑authorize session (it includes the one‑time Gmail re‑consent that clears the
+> "permissions not sufficient" emails, plus the GST/Job‑P&L backfill and the Drive‑intake start).
+
+For a fresh from‑scratch install, full guide in [`DEPLOY.md`](DEPLOY.md). In short:
 
 1. **Create an Apps Script project** on the account that owns the workbook; paste in `Code.gs`, `AutoServer.gs`, `Backups.gs`, `ReceiptOps.gs`, `FeedHistory.gs`, `OcrFill.gs`, the `Index` HTML file, and `appsscript.json`.
 2. **Fill in your IDs** (spreadsheet + Drive folders) and run **`setup()`** — it creates the app tabs and prints your `ROUTER_SECRET`.

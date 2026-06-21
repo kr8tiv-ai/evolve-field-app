@@ -22,7 +22,7 @@
  * ============================================================================
  */
 var RECEIPT_OPS = {
-  NOTIFY:                'manager@yourcompany.com,todd@evolveecoblasting.com', // discrepancy report + router-down alert
+  NOTIFY:                'manager@yourcompany.com', // operator only — discrepancy report + router-down alert (Todd gets only the morning digest)
   LOG_SHEET:             '🗒 App Log',
   RECEIPT_SHEET:         '📒 Receipt Log',
   TZ:                    'America/Edmonton',

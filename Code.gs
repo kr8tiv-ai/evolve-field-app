@@ -129,9 +129,11 @@ function setup() {
   }
 
   SpreadsheetApp.flush();
+  var _pf = (typeof EV_preflight_ === 'function') ? EV_preflight_() : [];
+  var _warn = _pf.length ? ('\n\n⚠ CONFIG NOT COMPLETE — fill these before installing triggers (installers will refuse):\n - ' + _pf.join('\n - ')) : '';
   return 'Setup complete. Tabs created: App Inbox, App Users, App Log.\n' +
-         'Default logins: Todd/0000, Matt/0000 (change these in the App Users tab).\n' +
-         'ROUTER_SECRET (give this to the Claude scheduled task): ' + secret;
+         'Default logins: Todd/0000, Matt/0000 (CHANGE these in the App Users tab now).\n' +
+         'ROUTER_SECRET (give this to the Claude scheduled task): ' + secret + _warn;
 }
 
 /** Print the router secret again any time. Run ▸ showSecret. */
@@ -290,13 +292,18 @@ function apiSubmit_core_(payload) {
     if (!inbox) return { ok: false, error: 'App Inbox tab missing — run setup() once.' };
 
     const subId = 'SUB-' + Utilities.formatDate(new Date(), CONFIG.TIMEZONE, 'yyMMdd-HHmmss') +
-                  '-' + Math.floor(Math.random() * 1000);
+                  '-' + ('00' + Math.floor(Math.random() * 1000)).slice(-3); // fixed-length: no id is a prefix of another
 
     // 1) Photos. Preferred path: client already uploaded them one-by-one via
     //    apiUploadPhoto and passes back the links. Legacy/fallback: inline base64.
     let photoLinks = [];
+    let photoFailures = 0;
     if (payload.photoLinks && payload.photoLinks.length) {
-      photoLinks = payload.photoLinks.slice();
+      // C-2: keep only real links — never let an 'UPLOAD_FAILED' sentinel masquerade as a photo.
+      payload.photoLinks.forEach(function (l) {
+        if (/^https?:\/\//i.test(String(l).replace(/^[A-Za-z][A-Za-z ]*:\s+/, ''))) photoLinks.push(l);
+        else photoFailures++;
+      });
     } else if (payload.photos && payload.photos.length) {
       const folder = photoFolderFor_(payload.category);
       payload.photos.forEach(function (p, i) {
@@ -308,7 +315,7 @@ function apiSubmit_core_(payload) {
           file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
           photoLinks.push(file.getUrl());
         } catch (err) {
-          photoLinks.push('UPLOAD_FAILED: ' + err);
+          photoFailures++;   // C-2: do NOT write a fake link; report it so the client can re-queue the photo
         }
       });
     }
@@ -333,7 +340,7 @@ function apiSubmit_core_(payload) {
       payload.device || '',                         // Device
       'NEW',                                        // Status
       '',                                           // Filed To (Claude fills)
-      '',                                           // Claude Notes (Claude fills)
+      photoFailures ? ('⚠ ' + photoFailures + ' photo upload(s) failed at capture — re-capture the photo') : '', // Claude Notes
       subId                                         // Submission ID
     ];
     inbox.appendRow(row);
@@ -342,7 +349,9 @@ function apiSubmit_core_(payload) {
       ok: true,
       id: subId,
       photoCount: photoLinks.length,
-      message: 'Captured. Claude will file this into the right place shortly.'
+      photoFailures: photoFailures,
+      message: 'Captured. Claude will file this into the right place shortly.' +
+               (photoFailures ? (' (note: ' + photoFailures + ' photo did not upload)') : '')
     };
   } catch (err) {
     return { ok: false, error: String(err) };
@@ -510,6 +519,7 @@ function doPost(e) {
       case 'setCell':    return jsonOut_(setCell_(body));    // {tab,a1,value}
       case 'markInbox':  return jsonOut_(markInbox_(body));  // {id,status,filedTo,notes}
       case 'sendEmail':  return jsonOut_(sendEmail_(body));  // {to,subject,htmlBody,attachmentBase64,attachmentName,saveToFolderId}
+      case 'insight':    return jsonOut_(upsertInsight_(body));  // F-3: {type,title,detail,score} upsert w/ fingerprint dedupe
       case 'log':        return jsonOut_(appLog_('Claude', body.message));
       default:           return jsonOut_({ ok: false, error: 'Unknown action: ' + body.action });
     }
@@ -532,7 +542,8 @@ function getNewInbox_(limit) {
   const data = sh.getRange(2, 1, last - 1, INBOX_HEADERS.length).getValues();
   const rows = [];
   for (let i = 0; i < data.length && rows.length < limit; i++) {
-    if (String(data[i][10]).toUpperCase() === 'NEW') {
+    const st = String(data[i][10]).toUpperCase();
+    if (st === 'NEW' || st === 'NEEDS REVIEW') {   // C-5: coordinator sees stuck rows, not just NEW
       let fields = {};
       try { fields = JSON.parse(data[i][4] || '{}'); } catch (e) {}
       rows.push({
@@ -541,7 +552,7 @@ function getNewInbox_(limit) {
         capturedBy: data[i][1], category: data[i][2], summary: data[i][3],
         fields: fields, photoLinks: String(data[i][5] || '').split('\n').filter(String),
         lat: data[i][6], lng: data[i][7], location: data[i][8], device: data[i][9],
-        id: data[i][13]
+        status: data[i][10], id: data[i][13]
       });
     }
   }
@@ -675,31 +686,16 @@ var EVOLVE = {
  *  TRIGGER INSTALLER  (idempotent — safe to re-run)
  * --------------------------------------------------------------------------*/
 function evolveInstallTriggers() {
-  var handlers = ['evolveDailyPersonalDigest6am','evolveMorningDigest',
-                  'evolveDispatchSweep','evolveScanReplies','evolveSupplierPriceScan'];
-  ScriptApp.getProjectTriggers().forEach(function(t){
-    if (handlers.indexOf(t.getHandlerFunction()) >= 0) ScriptApp.deleteTrigger(t);
-  });
-
-  ScriptApp.newTrigger('evolveDailyPersonalDigest6am')
-    .timeBased().atHour(6).nearMinute(0).everyDays(1).inTimezone(EVOLVE.TZ).create();
-
-  ScriptApp.newTrigger('evolveMorningDigest')
-    .timeBased().atHour(7).nearMinute(45).everyDays(1).inTimezone(EVOLVE.TZ).create();
-
-  [7,13,19].forEach(function(h){
-    ScriptApp.newTrigger('evolveDispatchSweep')
-      .timeBased().atHour(h).nearMinute(8).everyDays(1).inTimezone(EVOLVE.TZ).create();
-  });
-
-  ScriptApp.newTrigger('evolveScanReplies').timeBased().everyMinutes(15).create();
-
-  ScriptApp.newTrigger('evolveSupplierPriceScan')
-    .timeBased().onMonthDay(1).atHour(9).inTimezone(EVOLVE.TZ).create();
-  ScriptApp.newTrigger('evolveSupplierPriceScan')
-    .timeBased().onMonthDay(15).atHour(9).inTimezone(EVOLVE.TZ).create();
-
-  try { appLog_('Trigger','Installed Evolve autonomy triggers (server-side): 6:00 personal digest, 7:45 ops digest, dispatch sweep 7/13/19, reply scan q15m, price scan 1st/15th. No PC dependency.'); } catch(e){}
+  // F-2: the legacy evolve* generation is SUPERSEDED by the EV_* generation (AutoServer.gs). Installing
+  // both double-sends every digest/sweep, so this installer no longer schedules the old handlers — it
+  // removes any that exist and delegates to the current installers. Kept as a named entry point so old
+  // runbooks keep working.
+  var legacy = ['evolveDailyPersonalDigest6am','evolveMorningDigest','evolveDispatchSweep','evolveScanReplies','evolveSupplierPriceScan'];
+  ScriptApp.getProjectTriggers().forEach(function(t){ if (legacy.indexOf(t.getHandlerFunction()) >= 0) ScriptApp.deleteTrigger(t); });
+  var out = [];
+  try { out.push(EV_installCore()); } catch(e){ try{ appLog_('Trigger','EV_installCore failed: '+e); }catch(_){} }
+  try { out.push(EV_installGmail()); } catch(e){ /* Gmail scope may not be authorized yet — run EV_installGmail after granting it */ }
+  try { appLog_('Trigger','evolveInstallTriggers delegated to the EV_* generation; legacy evolve* triggers removed to prevent double-send.'); } catch(e){}
   return evolveListTriggers();
 }
 
@@ -772,6 +768,7 @@ function evolveAsDate_(v){
  *  OPS MORNING DIGEST  (was: evolve-morning-digest, 7:45am)
  * --------------------------------------------------------------------------*/
 function evolveMorningDigest() {
+  if (typeof EV_morningDigest === 'function') return; // F-2: superseded by EV_morningDigest (no double-send)
   try {
     var html = evolveBuildOpsDigest_();
     sendEmail_({ to: EVOLVE.OWNER_EMAIL,
@@ -866,6 +863,7 @@ function evolveBuildOpsDigest_() {
  *  PERSONAL 6 AM DIGEST  (was: daily-digest-6am)
  * --------------------------------------------------------------------------*/
 function evolveDailyPersonalDigest6am() {
+  if (typeof EV_personalDigest === 'function') return; // F-2: superseded by EV_personalDigest
   try {
     var html = evolveBuildPersonalDigest_();
     sendEmail_({ to: EVOLVE.OWNER_EMAIL,
@@ -913,6 +911,7 @@ function evolveBuildPersonalDigest_() {
  *  needs attention.
  * --------------------------------------------------------------------------*/
 function evolveDispatchSweep() {
+  if (typeof EV_dispatchSweep === 'function') return; // F-2: superseded by EV_dispatchSweep
   var alerts = [];
   // unfiled inbox
   var unfiled = 0;
@@ -970,6 +969,7 @@ function evolveDispatchSweep() {
  *  applies light actions, marks the thread Processed, and confirms by reply.
  * --------------------------------------------------------------------------*/
 function evolveScanReplies() {
+  if (typeof EV_replyMonitor === 'function') return; // F-2: superseded by EV_replyMonitor
   var label = evolveGetLabel_(EVOLVE.PROCESSED_LABEL);
   var query = 'from:(' + EVOLVE.OWNER_EMAIL + ') newer_than:3d -label:"' + EVOLVE.PROCESSED_LABEL + '"';
   var threads = GmailApp.search(query, 0, 25);
@@ -1075,6 +1075,7 @@ function evolveActOnItems_(items){
  *  the cadence alive server-side and nudges Todd so it never silently lapses.)
  * --------------------------------------------------------------------------*/
 function evolveSupplierPriceScan() {
+  if (typeof EV_dispatchSweep === 'function') return; // F-2: superseded by the EV_* generation
   try {
     var html = evolveHeader_('Supplier price scan — biweekly', evolveToday_());
     var snap = '';
