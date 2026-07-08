@@ -95,6 +95,9 @@ var EV = {
   TZ: 'America/Edmonton',
   TODD: 'todd@evolveecoblasting.com',
   MATT: 'manager@yourcompany.com',
+  // NOTIFICATION MODEL: the OWNER (Todd) gets ONLY the morning digest + app-requested items (quotes).
+  // Everything operational — dispatch sweep, the personal digest, receipt check, router/failure alerts,
+  // proof runs — goes to the OPERATOR (Matt) only. DIGEST_TO is therefore used ONLY by the morning digest.
   get DIGEST_TO() { return EV.TODD + ',' + EV.MATT; },
   SHEETS: {
     dispatch: 'Dispatch', todo: 'To-Do', actions: 'Action Items',
@@ -184,7 +187,8 @@ function EV_values_(name) {
 /** Dispatch booked jobs: any row with a Customer (col E). Cols A..M. */
 function EV_dispatchJobs_() {
   var v = EV_values_(EV.SHEETS.dispatch), out = [];
-  for (var i = 6; i < v.length; i++) { // data starts after header row 6
+  var _s = EV_dataStart_(v, ['customer', 'crew', 'status']); if (_s < 0) _s = 6; // E-1: find data row by header signature
+  for (var i = _s; i < v.length; i++) {
     var r = v[i], cust = (r[4] || '').trim();
     if (!cust || cust.toUpperCase() === 'CUSTOMER') continue;
     if (/^(THIS WEEK|WHAT'S AHEAD|STATUS KEY)/i.test((r[1] || '').trim())) continue;
@@ -200,7 +204,8 @@ function EV_dispatchJobs_() {
 /** To-Do items: rows whose col A is a number (the #). */
 function EV_todoItems_() {
   var v = EV_values_(EV.SHEETS.todo), out = [];
-  for (var i = 6; i < v.length; i++) {
+  var _s = EV_dataStart_(v, ['task', 'priority', 'status']); if (_s < 0) _s = 6; // E-1
+  for (var i = _s; i < v.length; i++) {
     var r = v[i], num = (r[0] || '').trim();
     if (!/^\d+$/.test(num)) continue;
     var status = (r[4] || '').trim();
@@ -213,7 +218,8 @@ function EV_todoItems_() {
 /** Open Action Items: rows with a Status of Open / In progress. Cols A..H. */
 function EV_actionItems_() {
   var v = EV_values_(EV.SHEETS.actions), out = [];
-  for (var i = 6; i < v.length; i++) {
+  var _s = EV_dataStart_(v, ['alert', 'type', 'status']); if (_s < 0) _s = 6; // E-1
+  for (var i = _s; i < v.length; i++) {
     var r = v[i], status = (r[6] || '').trim();
     if (!/^(open|in progress|in-progress|blocked)$/i.test(status)) continue;
     out.push({ raised: r[0], alert: r[1], type: r[2], relates: r[3], due: r[4], owner: r[5], status: status, notes: r[7], dueDate: EV_parseDate_(r[4]) });
@@ -224,7 +230,8 @@ function EV_actionItems_() {
 /** Outstanding quotes: rows whose col A is an ECO-Q number. Cols A..T. */
 function EV_quotes_() {
   var v = EV_values_(EV.SHEETS.quotes), out = [];
-  for (var i = 6; i < v.length; i++) {
+  var _s = EV_dataStart_(v, ['quote', 'client', 'total']); if (_s < 0) _s = 6; // E-1
+  for (var i = _s; i < v.length; i++) {
     var r = v[i], no = (r[0] || '').trim();
     if (!/^ECO-Q-/i.test(no)) continue;
     out.push({ no: no, date: r[1], client: r[2], address: r[5], scope: r[6], total: r[9], status: (r[12] || '').trim(), validUntil: r[13], sqft: r[17], depth: r[19], validDate: EV_parseDate_(r[13]), dateObj: EV_parseDate_(r[1]) });
@@ -235,7 +242,8 @@ function EV_quotes_() {
 /** Leads: rows with a Status (col H) and a Lead name (col B). Cols A..L. */
 function EV_leads_() {
   var v = EV_values_(EV.SHEETS.leads), out = [];
-  for (var i = 6; i < v.length; i++) {
+  var _s = EV_dataStart_(v, ['lead', 'status', 'next action']); if (_s < 0) _s = 6; // E-1
+  for (var i = _s; i < v.length; i++) {
     var r = v[i], status = (r[7] || '').trim(), lead = (r[1] || '').trim();
     if (!lead || !status) continue;
     if (/^STATUS FLOW/i.test(lead)) continue;
@@ -319,9 +327,10 @@ var EV_TAGLINES = [
 
 function EV_morningDigest() {
   try {
-    var html = EV_buildMorningDigestHtml_();
+    var html = EV_buildMorningDigestHtml_();   // CANONICAL builder (v2 light/borealis design — the one Matt prefers). Single source for 6AM + test + preview.
     var subject = 'Evolve Morning Digest — ' + EV_fmt_(EV_now_(), 'MMMM d, yyyy');
     EV_send_(EV.DIGEST_TO, subject, html);
+    try { EV_makeDigestVisible_(subject); } catch (e) {} // FIX 2026-06-23: keep it visible to Matt
     appLog_('Autopilot', 'MORNING DIGEST sent server-side (' + EV_fmt_(EV_now_(), 'HH:mm') + ') — heartbeat');
     return 'sent';
   } catch (err) {
@@ -330,7 +339,36 @@ function EV_morningDigest() {
   }
 }
 
-function EV_buildMorningDigestHtml_() {
+/**
+ * FIX 2026-06-23 — Make the just-sent morning digest UNMISSABLE in Matt's Primary inbox.
+ * The digest is sent by this same Google account (manager@yourcompany.com), so Gmail treats the
+ * received copy as self-sent: auto-marked read, threaded under Sent, no new-mail notification.
+ * This re-surfaces it: star + mark unread + important, and strips the Evolve/Logged label if it
+ * was ever applied. Wrapped so it can NEVER break the send.
+ */
+function EV_makeDigestVisible_(subject) {
+  /*__evGuard*/ try { GmailApp.getInboxUnreadCount(); } catch (__ng) { return; } // Gmail scope not authorized yet
+  try {
+    var threads = GmailApp.search('subject:"' + subject + '" newer_than:1d', 0, 5);
+    var loggedLabel = GmailApp.getUserLabelByName(EV.LABEL);
+    threads.forEach(function (th) {
+      try { if (loggedLabel) th.removeLabel(loggedLabel); } catch (e) {}
+      try { th.markImportant(); } catch (e) {}
+      try {
+        th.getMessages().forEach(function (m) {
+          var s = String(m.getSubject ? m.getSubject() : '');
+          if (s.indexOf('Evolve Morning Digest') === 0) {
+            try { m.markUnread(); } catch (e1) {}
+            try { m.star(); } catch (e2) {}
+          }
+        });
+      } catch (e) {}
+      try { th.markUnread(); } catch (e) {}
+    });
+  } catch (e) {}
+}
+
+function EV_buildMorningDigestHtml_v1_() {
   var jobs = EV_dispatchJobs_(), quotes = EV_quotes_(), actions = EV_actionItems_(),
       leads = EV_leads_(), todos = EV_todoItems_(), inbox = EV_inboxOpen_(), wx = EV_weather_();
   var yKey = EV_fmt_(new Date(EV_now_().getTime() - 86400000), 'yyyyMMdd');
@@ -374,6 +412,7 @@ function EV_buildMorningDigestHtml_() {
 
   // ----- BUSINESS BRAIN + YESTERDAY RECAP + WHAT WE SHIPPED (each returns '' if no data) -----
   H.push(EV_brainCard_());
+  H.push(EV_biDashboardCard_());
   H.push(EV_capturedCard_());
   H.push(EV_activityCard_());
   H.push(EV_upgradesCard_());
@@ -587,7 +626,7 @@ function EV_logChange_(title, detail) {
 }
 /* Build the digest HTML WITHOUT sending — run from the editor to verify it renders. */
 function EV_previewDigest() {
-  var h = EV_buildMorningDigestHtml_();
+  var h = EV_buildDigestV3_();
   Logger.log('Digest built OK — ' + h.length + ' chars. Cards: ' +
     ['brain', 'captured', 'autopilot', 'upgrades'].filter(function (k) {
       return ({ brain: EV_brainCard_(), captured: EV_capturedCard_(), autopilot: EV_activityCard_(), upgrades: EV_upgradesCard_() }[k]) !== '';
@@ -600,7 +639,12 @@ function EV_previewDigest() {
 // ---------------------------------------------------------------------------
 function EV_dispatchSweep() {
   try { EV_fileInbox_(); } catch(_e){} // hook: server-side inbox filing (added 2026-06-13, Claude)
-  try { EV_generateInsights(); } catch(_ei){} // hook: refresh business-brain insights
+  try { EV_rollupJobCosts_(); } catch(_jr){} // B-2: recompute per-job actual costs from receipts (idempotent)
+  try { EV_raiseSweepActionItems_(); } catch(_ai){} // B-4: raise money-loop Action Items, deduped by key
+  try { EV_generateInsights(); } catch(_ei){} // hook: refresh business-brain insights (prunes "New" rows first)
+  try { EV_intelligenceSweep_(); } catch(_is){} // BI: runs AFTER generateInsights so its insights aren't pruned
+  try { EV_ensureDriveIntake_(); } catch(_di){} // self-install the loose-receipt Drive intake trigger if missing (no editor needed)
+  try { EV_ensureReplyMonitor_(); } catch(_rm){} // self-install the hourly reply monitor trigger if missing (runs once Gmail is consented)
   try {
     var findings = EV_sweepFindings_();
     var when = EV_fmt_(EV_now_(), 'HH:mm');
@@ -610,7 +654,7 @@ function EV_dispatchSweep() {
         '<div style="font-size:16px;font-weight:bold;color:#b3261e;">Evolve — items that need a human (' + EV_fmt_(EV_now_(), 'MMM d, HH:mm') + ')</div>' +
         '<ul style="font-size:14px;padding-left:18px;">' + findings.map(function (f) { return '<li style="margin:4px 0;">' + f + '</li>'; }).join('') + '</ul>' +
         '<div style="font-size:12px;color:#667;">Server-side audit (runs 7 AM, 1 PM, 7 PM whether the PC is on or off). Reply to add or resolve items.</div></div>';
-      EV_send_(EV.TODD, 'Evolve sweep — ' + findings.length + ' item(s) need attention', html, { cc: EV.MATT });
+      EV_send_(EV.MATT, 'Evolve sweep — ' + findings.length + ' item(s) need attention', html); // operator only; Todd sees what matters in the morning digest
     }
     return findings.length + ' findings';
   } catch (err) {
@@ -656,11 +700,14 @@ function EV_replyMonitor() {
   /*__evGuard*/ try{GmailApp.getInboxUnreadCount();}catch(__ng){try{appLog_('Trigger','EV_replyMonitor skipped: Gmail scope not authorized yet — no FAILED alert sent (pending one-time consent).');}catch(_l){}return;}
   try {
     var label = EV_getLabel_(EV.LABEL);
+    var book = SpreadsheetApp.openById(EV_FILER_SS_ID);
     var queries = [
       'subject:"Evolve Morning Digest" -label:"' + EV.LABEL + '" newer_than:7d',
       'subject:"The Daily Digest" -label:"' + EV.LABEL + '" newer_than:7d',
       'subject:"Evolve sweep" -label:"' + EV.LABEL + '" newer_than:7d',
-      'subject:"New quote ECO-Q" -label:"' + EV.LABEL + '" newer_than:14d'
+      'subject:"Evolve receipt check" -label:"' + EV.LABEL + '" newer_than:14d',
+      'subject:"New quote ECO-Q" -label:"' + EV.LABEL + '" newer_than:14d',
+      'subject:"Evolve — " -label:"' + EV.LABEL + '" newer_than:14d'
     ];
     var processed = 0, logged = 0;
     queries.forEach(function (q) {
@@ -670,21 +717,41 @@ function EV_replyMonitor() {
         var newItems = [];
         msgs.forEach(function (m) {
           var from = m.getFrom();
-          if (/manager@yourcompany\.com/i.test(from)) return;        // skip our own outbound
+          // Skip our OWN automated send (operator address + original subject, no "Re:"), but DO process a
+          // human reply FROM the operator (subject starts "Re:") so Matt can give feedback by reply too.
+          var subj = String(m.getSubject ? m.getSubject() : '');
+          // FIX 2026-06-23: the old guard checked a placeholder address that never matched, so the
+          // monitor cannibalised our OWN outbound digest (marking it read + labelling it). Skip any
+          // original (non-"Re:") message that came FROM the Evolve sending identity; genuine human
+          // replies start with "Re:" and still flow through.
+          if ((/manager@yourcompany\.com/i.test(from) || /todd@evolveecoblasting\.com/i.test(from) || /evolve eco blasting/i.test(from)) && !/^\s*re:/i.test(subj)) return;
           if (m.isInChats && m.isInChats()) return;
+          // GUARD (2026-06-23): skip automated / transactional senders and obvious test/system subjects.
+          // Bounce notices (mailer-daemon) and store webhooks (resend.dev / Printful / Stripe TEST) were
+          // being ingested and mis-classified into bogus "fix"/"correction" Action Items.
+          if (/(mailer-daemon|postmaster|no-?reply|do-?not-?reply|notifications?@|onboarding@|resend\.dev|printful|stripe|shopify)/i.test(from)) return;
+          if (typeof EV_isNoise_ === 'function' && EV_isNoise_(subj)) return;
           var items = EV_extractItems_(m.getPlainBody());
           items.forEach(function (it) { newItems.push({ text: it, from: from }); });
         });
+        // GUARD (2026-06-23): drop noise lines (test / printful / stripe / example.com / "action: failed")
+        // before they are classified into To-Do / Action Items.
+        newItems = newItems.filter(function (n) { return !(typeof EV_isNoise_ === 'function' && EV_isNoise_(n.text)); });
         if (newItems.length) {
-          newItems.forEach(function (n) { if (EV_addToDo_(n.text, n.from)) logged++; });
+          // Incorporate each reply line: classify it (approval / fix / request / correction / done /
+          // feedback) and route it into the right system action — not just dump it into To-Do.
+          var actions = newItems.map(function (n) { logged++; return '• ' + n.text + '  →  ' + EV_routeReplyItem_(book, n.text, n.from); });
           try {
-            th.reply('Logged to the Evolve workbook:\n\n' + newItems.map(function (n) { return '• ' + n.text; }).join('\n') +
-              '\n\nThese are now in the To-Do tab and will surface in tomorrow\'s digest. — Evolve Autopilot');
+            th.reply('Got it — incorporated into the Evolve system:\n\n' + actions.join('\n') +
+              '\n\nRequests and fixes were sent to Matt; corrections and approvals are flagged in the workbook. — Evolve');
           } catch (e) {}
+          // FIX 2026-06-23: only file + mark-read threads that contained a GENUINE human reply.
+          // A thread that is just our outbound digest (no human reply yet) is intentionally left
+          // UNREAD and unlabeled so it stays visible at the top of Matt's Primary inbox.
+          th.addLabel(label);
+          try { th.markRead(); } catch (e) {}
+          processed++;
         }
-        th.addLabel(label);
-        try { th.markRead(); } catch (e) {}
-        processed++;
       });
     });
     appLog_('Autopilot', 'Reply monitor — heartbeat; processed ' + processed + ' thread(s), logged ' + logged + ' item(s)');
@@ -722,14 +789,93 @@ function EV_addToDo_(text, from) {
     var nums = EV_todoItems_().map(function (t) { return +t.num; });
     var next = (nums.length ? Math.max.apply(null, nums) : 0) + 1;
     var who = (from || '').replace(/.*</, '').replace(/>.*/, '') || from;
-    sh.appendRow([String(next), text, 'Inbox / Reply', 'Medium', 'To Do', EV_fmt_(EV_now_(), 'MM/dd/yyyy'), '', 'Added automatically from an email reply (' + who + ')']);
+    sh.appendRow([String(next), text, 'Inbox / Reply', 'Medium', 'To Do', EV_fmt_(EV_now_(), 'yyyy-MM-dd'), '', 'Added automatically from an email reply (' + who + ')']);   // FIX 2026-07-08: ISO date (was MM/dd/yyyy → misread day-first as a month early/late)
     appLog_('Autopilot', 'To-Do +1 from reply: ' + text.slice(0, 80));
     return true;
   } catch (e) { return false; }
 }
 
+/** Append a To-Do with an explicit category + priority (used by the reply router). */
+function EV_addToDoCat_(text, from, category, priority) {
+  try {
+    var sh = EV_sheet_(EV.SHEETS.todo); if (!sh) return false;
+    var nums = EV_todoItems_().map(function (t) { return +t.num; });
+    var next = (nums.length ? Math.max.apply(null, nums) : 0) + 1;
+    var who = (from || '').replace(/.*</, '').replace(/>.*/, '') || from;
+    sh.appendRow([String(next), text, category || 'Inbox / Reply', priority || 'Medium', 'To Do', EV_fmt_(EV_now_(), 'yyyy-MM-dd'), '', 'From an email reply (' + who + ')']);   // FIX 2026-07-08: ISO date (was MM/dd/yyyy → misread day-first)
+    appLog_('Autopilot', 'To-Do +1 [' + (category || 'Reply') + '] from reply: ' + String(text).slice(0, 80));
+    return true;
+  } catch (e) { return false; }
+}
+
+/** Notify the operator (Matt) about a request/fix/correction from a reply. */
+function EV_emailOperator_(subject, body, from) {
+  try { MailApp.sendEmail(EV.MATT, subject, String(body) + '\n\n— from a reply by ' + (from || '') + ', via the Evolve reply monitor.'); } catch (e) {}
+}
+
+/** Mark a quote Approved (from a reply). Returns true if the row was found + updated. */
+function EV_markQuoteApproved_(book, qno, who) {
+  try {
+    book = book || SpreadsheetApp.openById(EV_FILER_SS_ID);
+    var q = EV_sheetEndingWith_(book, 'Quotes'); if (!q) return false;
+    var v = q.getDataRange().getValues(); var h = EV_headerIndex_(v, ['quote', 'client', 'total']); if (h < 0) return false;
+    var H = v[h], cNo = EV_colIndex_(H, 'Quote'), cStatus = EV_colIndex_(H, 'Status');
+    for (var r = h + 1; r < v.length; r++) {
+      if (String(v[r][cNo]).trim().toUpperCase() === String(qno).trim().toUpperCase()) {
+        if (cStatus >= 0) q.getRange(r + 1, cStatus + 1).setValue('Approved (reply ' + EV_today_() + ')');
+        return true;
+      }
+    }
+  } catch (e) {}
+  return false;
+}
+
+/** Incorporate ONE reply line into the system based on its classification. Returns a short
+ *  description of the action taken (shown back to the replier). */
+function EV_routeReplyItem_(book, text, from) {
+  var cls = EV_classifyReply_(text);
+  var who = (from || '').replace(/.*</, '').replace(/>.*/, '') || from;
+  try {
+    switch (cls.type) {
+      case 'approval':
+        var ok = EV_markQuoteApproved_(book, cls.quote, who);
+        EV_addToDoCat_('Schedule approved quote ' + cls.quote, from, 'Dispatch', 'High');
+        return 'approved ' + cls.quote + (ok ? ' — status set, scheduling To-Do raised' : ' (quote row not found; To-Do raised)');
+      case 'done':
+        return 'noted as done';
+      case 'fix':
+        EV_addToDoCat_('FIX: ' + text, from, 'Fix / Bug', 'High');
+        try { EV_raiseActionItem_(book, 'reply-fix-' + EV_slug_(text), 'Field-reported fix: ' + text, 'Fix', who, '', 'Matt'); } catch (e) {}
+        EV_emailOperator_('Evolve — fix reported by ' + who, text, from);
+        return 'logged as a FIX (To-Do High + Action Item) and emailed Matt';
+      case 'correction':
+        EV_addToDoCat_('CORRECTION: ' + text, from, 'Correction', 'High');
+        try { EV_raiseActionItem_(book, 'reply-corr-' + EV_slug_(text), 'Data correction from a reply: ' + text, 'Correction', who, '', 'Matt'); } catch (e) {}
+        EV_emailOperator_('Evolve — correction from ' + who, text, from);
+        return 'flagged as a CORRECTION (Action Item) and emailed Matt';
+      case 'request':
+        EV_addToDoCat_('REQUEST: ' + text, from, 'Request', 'Medium');
+        EV_emailOperator_('Evolve — request from ' + who, text, from);
+        return 'logged as a REQUEST and emailed Matt';
+      default:
+        EV_addToDoCat_('FEEDBACK: ' + text, from, 'Feedback / Reply', 'Low');
+        return 'logged as feedback';
+    }
+  } catch (e) { try { EV_addToDo_(text, from); } catch (_e) {} return 'logged (routing fell back)'; }
+}
+
 function EV_getLabel_(name) {
   return GmailApp.getUserLabelByName(name) || GmailApp.createLabel(name);
+}
+
+/** Install ONLY the hourly reply-monitor trigger if it's missing (does NOT re-add the personal
+ *  digest, which a parallel session intentionally removed). The monitor no-ops until Gmail is
+ *  consented; run EV_replyMonitor once in the editor and click Allow to grant gmail.modify. */
+function EV_ensureReplyMonitor_() {
+  var has = ScriptApp.getProjectTriggers().some(function (t) { return t.getHandlerFunction() === 'EV_replyMonitor'; });
+  if (has) return;
+  ScriptApp.newTrigger('EV_replyMonitor').timeBased().everyHours(1).create();
+  try { appLog_('Autopilot', 'Self-installed hourly reply monitor trigger.'); } catch (e) {}
 }
 
 // ---------------------------------------------------------------------------
@@ -746,6 +892,7 @@ var EV_DD_TAGLINES = [
 ];
 
 function EV_personalDigest() {
+  /*__evGuard*/ try{GmailApp.getInboxUnreadCount();}catch(__ng){try{appLog_('Trigger','EV_personalDigest skipped: Gmail scope not authorized yet — run EV_installGmail in the editor and grant consent (one-time). No FAILED alert sent.');}catch(_l){}return;}
   try {
     var threads = GmailApp.search('subject:"The Daily Digest"', 0, 8);
     var master = [];
@@ -779,7 +926,7 @@ function EV_personalDigest() {
     else html += '<p>The list is mysteriously empty. Either you finished everything, or the raccoons ate it. Reply with items to rebuild it.</p>';
     if (victory.length) html += '<div style="font-weight:bold;margin:10px 0 4px;">✅ VICTORY LAP</div><ul style="font-size:14px;padding-left:18px;color:#1a7f37;">' + victory.map(function (x) { return '<li>' + EV_esc_(x) + '</li>'; }).join('') + '</ul>';
     html += '<div style="font-size:12px;color:#667;background:#faf6ee;border-radius:8px;padding:10px 12px;margin-top:12px;">Reply with new items from any account, and they land on tomorrow\'s list automatically. Say "done &lt;thing&gt;" to retire it. Sent server-side; it goes out whether or not the computer is on.</div></div></div>';
-    EV_send_(EV.DIGEST_TO, 'The Daily Digest — ' + EV_fmt_(EV_now_(), 'EEEE, MMMM d'), html);
+    EV_send_(EV.MATT, 'The Daily Digest — ' + EV_fmt_(EV_now_(), 'EEEE, MMMM d'), html); // operator only (not Todd)
     appLog_('Autopilot', 'PERSONAL DAILY DIGEST sent server-side — heartbeat (' + master.length + ' items)');
     return 'sent ' + master.length + ' items';
   } catch (err) {
@@ -803,8 +950,12 @@ function EV_listFromHtml_(html) {
 //  FAILURE NOTIFY  (so a silent failure becomes visible)
 // ---------------------------------------------------------------------------
 function EV_failNotify_(fn, err) {
-  try { appLog_('Autopilot', 'ERROR in ' + fn + ': ' + (err && err.message ? err.message : err)); } catch (e) {}
-  if(/authoriz/i.test(String((err&&err.message)||err)))return; try { MailApp.sendEmail(EV.MATT, 'Evolve Autopilot FAILED: ' + fn, String(err && err.stack ? err.stack : err)); } catch (e) {}
+  var m = String((err && err.message) || err);
+  try { appLog_('Autopilot', 'ERROR in ' + fn + ': ' + m); } catch (e) {}
+  // Never email on authorization/scope/permission issues — they self-heal on a one-time re-consent and
+  // just spam the operator. (Fixes the "Specified permissions are not sufficient" email storm.)
+  if (/authoriz|permission|not sufficient|insufficient|\bscope\b|PERMISSION_DENIED|access.?denied/i.test(m)) return;
+  try { MailApp.sendEmail(EV.MATT, 'Evolve Autopilot FAILED: ' + fn, String(err && err.stack ? err.stack : err)); } catch (e) {}
 }
 
 // ===========================================================================
@@ -818,6 +969,7 @@ function EV_deleteTriggers_(names) {
 
 /** Core triggers — work with the EXISTING scopes (no Gmail). Run this first. */
 function EV_installCore() {
+  EV_requireConfigured_();   // E-4: refuse to install while YOUR_* placeholders remain
   ScriptApp.getProjectTriggers().forEach(function(t){if(t.getHandlerFunction().indexOf("EV_")!==0)ScriptApp.deleteTrigger(t);});
   EV_deleteTriggers_(['EV_morningDigest', 'EV_dispatchSweep']);
   ScriptApp.newTrigger('EV_morningDigest').timeBased().atHour(7).nearMinute(45).everyDays(1).create();
@@ -864,11 +1016,11 @@ function EV_scheduleProof() {
 function EV_proofRun() {
   EV_deleteTriggers_(['EV_proofRun']); // one-shot cleanup
   var stamp = EV_fmt_(EV_now_(), 'yyyy-MM-dd HH:mm:ss');
-  var html = EV_buildMorningDigestHtml_();
+  var html = EV_buildMorningDigestHtml_();   // FIX 2026-07-08: canonical v2 builder (was V3 → proof email didn't match the real digest)
   html = '<div style="background:#1a7f37;color:#fff;padding:8px 12px;font-family:Arial;border-radius:6px;margin-bottom:8px;">' +
     'AUTONOMY PROOF — fired by an Apps Script time trigger on Google\'s servers at ' + stamp +
     ' (America/Edmonton). No PC, no Claude app involved.</div>' + html;
-  EV_send_(EV.DIGEST_TO, 'Evolve Autopilot — autonomy proof ' + stamp, html);
+  EV_send_(EV.MATT, 'Evolve Autopilot — autonomy proof ' + stamp, html); // operator only
   appLog_('Autopilot', 'PROOF RUN executed server-side at ' + stamp + ' — heartbeat');
   return 'proof sent ' + stamp;
 }
@@ -942,7 +1094,7 @@ function EV_findAmount_(details){
   for(var i=0;i<pref.length;i++){
     var k=pref[i];
     if(details[k]!=null && String(details[k]).trim()!==''){
-      var n=parseFloat(String(details[k]).replace(/[^0-9.\-]/g,''));
+      var n=EV_amount_(details[k]);          // robust money parse (handles 1,250.00)
       if(!isNaN(n)) return n;
     }
   }
@@ -950,7 +1102,7 @@ function EV_findAmount_(details){
   var keys=Object.keys(details);
   for(var j=0;j<keys.length;j++){
     if(/total|amount/i.test(keys[j]) && !/unit|qty|quantity|sub|gst|hst|tax/i.test(keys[j])){
-      var n2=parseFloat(String(details[keys[j]]).replace(/[^0-9.\-]/g,''));
+      var n2=EV_amount_(details[keys[j]]);
       if(!isNaN(n2)) return n2;
     }
   }
@@ -966,18 +1118,46 @@ function EV_routeCategory_(cat, details){
 }
 
 function EV_fileExpense_(book, irow, ih, details, photo, sub){
-  if (GEMINI_API_KEY && photo && (!details.vendor || !details.total)) { try { var _o=EV_ocrReceipt_(photo); if(_o){ details.vendor=details.vendor||_o.vendor; details.total=details.total||_o.total; details.category=details.category||_o.category; details.what=details.what||_o.items; } } catch(_x){} } // OCR pre-fill (gated)
-  if (EV_isDupReceipt_(book, details)) { try{ appLog_('Receipt','Duplicate receipt skipped: '+(details.vendor||'')+' $'+(details.total||'')+' '+(details.date||'')); }catch(_d){} return 'Expenses (duplicate skipped)'; }
+  if (GEMINI_API_KEY && photo && (!details.vendor || !details.total)) { try { var _o=EV_ocrReceipt_(photo); if(_o){ details.vendor=details.vendor||_o.vendor; details.total=details.total||_o.total; details.category=details.category||_o.category; details.what=details.what||_o.items; details.gst=details.gst||_o.gst; details.date=details.date||_o.date; } } catch(_x){} } // OCR pre-fill (gated)
+  if (EV_isDupReceipt_(book, details, sub)) { try{ appLog_('Receipt','Duplicate receipt skipped: '+(details.vendor||'')+' $'+(details.total||'')+' '+(details.date||'')); }catch(_d){} return 'Expenses (duplicate skipped)'; }
+
+  var by=irow[EV_colIndex_(ih,'Captured')];
+  var summary=irow[EV_colIndex_(ih,'Summary')];
+
+  // Bookkeeping date = the PRINTED RECEIPT date. If missing/impossible (future), fall back to the
+  // submission date but FLAG it (A-4) so a wrong-month spend date is never booked silently.
+  var _rcptD = EV_toDate_(details.date);
+  var _future = (_rcptD instanceof Date) && _rcptD.getTime() > EV_now_().getTime()+86400000;
+  var _dateOk = (_rcptD instanceof Date && !_future);
+  var _useDate = _dateOk ? _rcptD : EV_toDate_(irow[0]);
+  var _dateFlag = _dateOk ? '' : ('receipt date '+(details.date?('"'+details.date+'" '):'')+'missing/invalid — used capture date, verify');
+
+  // FINANCIAL GATE (A-2): if the total is missing, zero, implausible, or fails the subtotal+GST
+  // check, HOLD the receipt OUT of Expenses/P&L. Record it once in the Receipt Log with the issue
+  // (so the 3-day report surfaces it) and leave the inbox NEEDS REVIEW. A wrong number never books.
+  var _fin = EV_receiptFinancialIssue_(details);
+  if (_fin) {
+    // Record (upsert by Submission ID) a HELD row in the Receipt Log so the issue is visible, but keep
+    // it OUT of Expenses/P&L. When the receipt is later corrected, the booking path upserts the SAME
+    // row to the correct values — the ledger never ends up with a stale wrong row.
+    EV_upsertReceiptLog_(book, sub, [ _useDate, EV_safeCell_(details.vendor||details.where||details.store||''),
+      EV_safeCell_(details.category||details.about||'Field App'), '', EV_safeCell_(details.gst||details.tax||''),
+      EV_safeCell_(details.total||''), '', EV_safeCell_(details.item||details.what||summary||''), '', '', '',
+      sub, EV_safeCell_(EV_cleanLink_(String(photo||'').split('\n')[0])), EV_safeCell_(by||''),
+      'HELD — '+_fin+(_dateFlag?(' · '+_dateFlag):''), EV_fmtNow_() ]);
+    try { appLog_('Receipt','Receipt HELD out of Expenses ('+(details.vendor||'?')+' $'+(details.total||'?')+'): '+_fin); } catch(_e){}
+    return null; // -> inbox stays NEEDS REVIEW (surfaced by sweep/digest); no wrong number on the books
+  }
+
+  // Idempotency (B-3/D-1): if this submission is already in Expenses, never write it twice.
+  if (EV_subAlreadyFiled_(book, 'Expenses', sub)) return 'Expenses (already filed '+sub+')';
+
   var exp=EV_sheetEndingWith_(book,'Expenses');
   var lastCol=exp.getLastColumn();
   var scanN=Math.min(20, exp.getMaxRows());
   var scan=exp.getRange(1,1,scanN,lastCol).getValues();
-  var hr=-1, eh=null;
-  for(var r=0;r<scan.length;r++){
-    var low=scan[r].map(function(x){return String(x).toLowerCase();});
-    if(low.indexOf('date')>=0 && low.join('|').indexOf('vendor')>=0){ hr=r+1; eh=scan[r]; break; }
-  }
-  if(hr<0){ hr=1; eh=scan[0]; }
+  var _h=EV_headerIndex_(scan,['date','vendor','total']);   // header by signature (E-1)
+  var hr=(_h<0?1:_h+1), eh=scan[hr-1];
   function gi(n){ return EV_colIndex_(eh,n); }
   var totalCol=gi('Total');
   var footer=-1;
@@ -996,57 +1176,53 @@ function EV_fileExpense_(book, irow, ih, details, photo, sub){
     if(blank){ target=r3; break; }
   }
   if(target<0){ exp.insertRowBefore(footer); target=footer; }
+
+  // Receipt -> job link (B-2): tag the Job ID so per-job cost roll-up is possible.
+  var _jobId = EV_matchJobId_(book, details, _useDate);
+
   var rowArr=new Array(lastCol).fill('');
   function put(name,val){ var k=gi(name); if(k>=0) rowArr[k]=EV_safeCell_(val); }
-  var by=irow[EV_colIndex_(ih,'Captured')];
-  var summary=irow[EV_colIndex_(ih,'Summary')];
-  // Bookkeeping date = the PRINTED RECEIPT date (details.date), not the submission timestamp.
-  // If it is missing or impossible (future), fall back to the submission date and let the
-  // verifier flag it in the Receipt Log Issue column rather than fabricating a real spend date.
-  var _rcptD = EV_toDate_(details.date);
-  var _future = (_rcptD instanceof Date) && _rcptD.getTime() > EV_now_().getTime()+86400000;
-  var _useDate = (_rcptD instanceof Date && !_future) ? _rcptD : EV_toDate_(irow[0]);
   put('Date', _useDate);
   put('Purchased by', by);
   put('What was purchased', details.item||details.what||details.purchased||summary||'');
   put('Vendor', details.vendor||details.where||details.store||'');
-  put('Why', details.job||details.reference||details.why||details.notes||'');
+  put('Why', details.job||details.reference||details.why||_jobId||details.notes||'');
   put('Category', details.category||details.about||'Field App');
   put('Qty', details.qty||details.quantity||'');
   put('Unit cost', details.unit||details.unitCost||'');
   put('Total', EV_findAmount_(details));
-  put('Description', String(summary||'')+' | SubID:'+sub+(photo?(' | Photo:'+photo):'')+' | auto-filed '+EV_fmtNow_());
+  put('Description', EV_withSub_(String(summary||'')+(photo?(' | Photo:'+photo):'')+(_jobId?(' | Job:'+_jobId):'')+' | auto-filed '+EV_fmtNow_(), sub));
   exp.getRange(target,1,1,lastCol).setValues([rowArr]);
 
-  // Verify typed values (deterministic — future date, math, sane total; no AI key / no OCR quota)
-  // and mirror into the QuickBooks-ready 📒 Receipt Log. Best-effort — never block the filing above.
+  // Verify typed values (deterministic) and mirror into the QuickBooks-ready 📒 Receipt Log
+  // (idempotent on the Submission ID). Best-effort — never blocks the Expenses write above.
   var _issue=''; try { _issue=EV_verifyReceipt_(details); } catch(_v){}
+  if(_dateFlag) _issue=(_issue?(_issue+'; '):'')+_dateFlag;
   var _total=EV_findAmount_(details);
-  var _gst=parseFloat(String(details.gst||details.tax||'').replace(/[^0-9.]/g,''));
-  var _sub=(!isNaN(_gst) && typeof _total==='number') ? (_total-_gst).toFixed(2) : '';
-  try {
-    var rl = EV_sheetEndingWith_(book, 'Receipt Log');
-    if (rl) {
-      rl.appendRow([
-        _useDate,                                                                  // Date (printed receipt date)
-        EV_safeCell_(details.vendor||details.where||details.store||''),            // Vendor
-        EV_safeCell_(details.category||details.about||'Field App'),                // Category
-        _sub,                                                                      // Subtotal (Total − GST)
-        EV_safeCell_(details.gst||details.tax||''),                                // GST/Tax
-        _total,                                                                    // Total
-        EV_safeCell_(details.payment||details.method||details.paidWith||''),       // Payment method
-        EV_safeCell_(details.item||details.what||details.purchased||summary||''),  // Line items
-        EV_safeCell_(details.qty||details.quantity||''),                           // Qty
-        EV_safeCell_(details.unit||details.unitCost||''),                          // Unit price
-        EV_safeCell_(details.job||details.reference||details.why||details.notes||''),// Job/reason
-        sub,                                                                       // Source (Inbox ID)
-        EV_safeCell_(String(photo||'').split('\n')[0].replace(/^[^:]+:\s*/,'')),   // Photo link (first, de-tagged)
-        EV_safeCell_(by||''),                                                      // Filed by
-        EV_safeCell_(_issue),                                                      // Issue/discrepancy
-        EV_fmtNow_()                                                               // Created
-      ]);
-    }
-  } catch (_rl) { try { appLog_('Receipt','Receipt Log mirror failed for '+sub+': '+_rl); } catch(_e){} }
+  // Separate GST on EVERY receipt: use typed/OCR'd subtotal+GST if present, else back-compute at the
+  // Alberta 5% rate (flagged estimated) so the Receipt Log is QuickBooks/tax-ready, never blank.
+  var _g = (typeof EV_ensureGst_==='function') ? EV_ensureGst_(details) : null;
+  var _sub = _g ? _g.subtotal : '';
+  var _gstVal = _g ? _g.gst : EV_safeCell_(details.gst||details.tax||'');
+  if (_g && _g.estimated) _issue = (_issue?(_issue+'; '):'') + 'GST estimated (5% incl.)';
+  EV_upsertReceiptLog_(book, sub, [
+    _useDate,                                                                  // Date (printed receipt date)
+    EV_safeCell_(details.vendor||details.where||details.store||''),            // Vendor
+    EV_safeCell_(details.category||details.about||'Field App'),                // Category
+    _sub,                                                                      // Subtotal (Total − GST, separated/estimated)
+    _gstVal,                                                                   // GST/Tax (separated/estimated)
+    _total,                                                                    // Total
+    EV_safeCell_(details.payment||details.method||details.paidWith||''),       // Payment method
+    EV_safeCell_(details.item||details.what||details.purchased||summary||''),  // Line items
+    EV_safeCell_(details.qty||details.quantity||''),                           // Qty
+    EV_safeCell_(details.unit||details.unitCost||''),                          // Unit price
+    EV_safeCell_(_jobId||details.job||details.reference||details.why||details.notes||''), // Job/reason (Job ID link)
+    sub,                                                                       // Source (Inbox ID)
+    EV_safeCell_(EV_cleanLink_(String(photo||'').split('\n')[0])),             // Photo link (first, de-tagged)
+    EV_safeCell_(by||''),                                                      // Filed by
+    EV_safeCell_(_issue),                                                      // Issue/discrepancy
+    EV_fmtNow_()                                                               // Created
+  ]);
 
   // Canonical vendor roll-up — populates the Vendors tab + de-typos the spend brain.
   try { EV_upsertVendor_(book, details.vendor||details.where||details.store||'', details.category||details.about||'', _total, EV_toDate_(irow[0])); } catch(_uv){}
@@ -1081,6 +1257,14 @@ function EV_fileInbox_(){
     var photo=String(data[r][cPhoto]||'');
     var dest=EV_routeDest_(cat,det,summary);
     try{
+      var _suffix = (dest==='Quote') ? 'Quotes' : dest;
+      // Idempotency (B-3/D-1): if this submission already reached the destination tab, never re-file.
+      if(dest!=='REVIEW' && sub && EV_subAlreadyFiled_(book,_suffix,sub)){
+        inbox.getRange(r+1,cStatus+1).setValue('FILED');
+        if(cFiled>=0) inbox.getRange(r+1,cFiled+1).setValue(_suffix+' (already filed)');
+        if(cNotes>=0) inbox.getRange(r+1,cNotes+1).setValue('Already filed to '+_suffix+' — skipped duplicate '+EV_fmtNow_());
+        filed++; notes.push(sub+'->dup-skip'); continue;
+      }
       var ref = (dest==='REVIEW') ? null : EV_fileByDest_(book,dest,data[r],ih,det,photo,sub,summary);
       if(ref){
         inbox.getRange(r+1,cStatus+1).setValue('FILED');
@@ -1088,8 +1272,14 @@ function EV_fileInbox_(){
         if(cNotes>=0) inbox.getRange(r+1,cNotes+1).setValue('Auto-filed to '+ref+' '+EV_fmtNow_());
         filed++; notes.push(sub+'->'+ref);
       } else {
+        // Nothing dead-ends (C-1): a capture we can't confidently place still reaches a book — raise a
+        // "review & file" To-Do ONCE (only on first encounter, while the row is still NEW), tagged with
+        // NO submission id so it can never block a genuine To-Do for the same capture if it's reclassified.
+        if(dest==='REVIEW' && stt==='NEW'){
+          try{ EV_fileTodo_(book,{task:'Review & file capture: '+(summary||cat),category:'Needs review',priority:'Medium',notes:'Unclassified field capture ('+cat+'). Open the App Inbox row to file it.'},summary,''); }catch(_t){}
+        }
         if(stt!=='NEEDS REVIEW') inbox.getRange(r+1,cStatus+1).setValue('NEEDS REVIEW');
-        if(cNotes>=0) inbox.getRange(r+1,cNotes+1).setValue('Needs human/Claude — '+cat+' '+EV_fmtNow_());
+        if(cNotes>=0) inbox.getRange(r+1,cNotes+1).setValue('Needs human/Claude — '+cat+(dest==='REVIEW'?' (review To-Do raised)':'')+' '+EV_fmtNow_());
         review++; notes.push(sub+'->REVIEW');
       }
     }catch(err){
@@ -1148,7 +1338,7 @@ function EV_setupBrain(){
   return "brain tabs ready";
 }
 
-function EV_money_(n){ n=Math.round(Number(n)*100)/100; return "$"+n.toLocaleString(); }
+function EV_money_(n){ var v=(typeof EV_amount_==='function')?EV_amount_(n):Number(n); if(v==null||isNaN(v)) v=Number(n); if(v==null||isNaN(v)) return '$0.00'; var neg=v<0; v=Math.abs(Math.round(v*100)/100); var p=v.toFixed(2).split('.'); p[0]=p[0].replace(/\B(?=(\d{3})+(?!\d))/g,','); return (neg?'-$':'$')+p[0]+'.'+p[1]; }
 
 function EV_brainExpenses_(book){
   var exp=EV_sheetEndingWith_(book,"Expenses"); if(!exp) return [];
@@ -1163,7 +1353,9 @@ function EV_brainExpenses_(book){
     if(notes.indexOf("seed row")>=0||notes.indexOf("baseline market")>=0||notes.indexOf("auto from price log")>=0) continue;
     if(vendor.toLowerCase().indexOf("test")>=0) continue;
     if(!vendor) continue; // skip footer/total + blank rows
-    var amt=Number(row[cT]); if(isNaN(amt)||amt===0) continue;
+    // FIX (2026-07-08): Number("1,234.56") is NaN → row was silently dropped from the spend brain,
+    // undercounting totals/top-vendor insights. EV_amount_ parses comma/EU totals correctly.
+    var amt=(typeof EV_amount_==='function')?EV_amount_(row[cT]):Number(row[cT]); if(isNaN(amt)||amt===0) continue;
     var dt=row[cD]; if(!(dt instanceof Date)){ try{ dt=EV_toDate_(dt); }catch(e){ dt=null; } }
     out.push({date:dt,vendor:vendor,category:String(row[cC]||"Uncategorized").trim(),amount:amt,what:String(row[cW]||"")});
   }

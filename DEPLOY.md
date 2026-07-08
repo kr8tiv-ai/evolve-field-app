@@ -34,6 +34,7 @@ edits or deletes the fragile legend/scorecard layouts, so it can't corrupt the b
 2. Approve the permission prompt (Sheets + Drive + Gmail; choose your account ▸ Advanced ▸ Allow). It runs as **you**.
 3. Open **View ▸ Logs**. Copy the **ROUTER_SECRET** it prints — you'll need it for the Claude agent. (Reprint any time: run **`showSecret`**.)
 4. Your workbook now has **📥 App Inbox**, **👥 App Users**, **🗒 App Log** tabs. Default logins: **Todd / 0000** and **Matt / 0000** — change these PINs in App Users.
+5. **Safety module:** also run **`setupSafety`** once. It creates the **🦺 FLHA** and **⚠️ Hazard Reports** tabs. FLHAs render a branded PDF into a `08 Safety - FLHA Records` Drive folder (created on demand) and email the owners; hazard reports email the owners immediately. Set the recipients in `Safety.gs` (`SAFETY.EMAIL_TO`). Give each crew member their own login in **👥 App Users** so their sign-offs are attributable.
 
 ## 4 · Deploy as a Web App
 1. **Deploy ▸ New deployment ▸** gear icon ▸ **Web app**.

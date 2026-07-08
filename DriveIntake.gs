@@ -1,0 +1,170 @@
+/**
+ * ============================================================================
+ *  EVOLVE DRIVE INTAKE  (added 2026-06-19)
+ * ----------------------------------------------------------------------------
+ *  Turns a Drive "drop folder" of loose receipt/quote photos (e.g. the pile Todd
+ *  dumped in "Evolve temp") into captured, OCR'd, filed data — for FREE.
+ *
+ *  For each new image in the drop folder it: OCRs it (Google Drive native OCR on
+ *  JPEG/PNG/PDF; HEIC via the Drive thumbnail), reads vendor/date/total with the
+ *  hardened parser, content-classifies it (receipt / quote / other), creates a
+ *  normal 📥 App Inbox row (Status NEW) so the EXISTING gated filer routes it
+ *  (receipt -> Expenses + Receipt Log w/ GST separated; quote -> Quotes), then
+ *  moves the file to a "✅ Filed" subfolder so it is never processed twice.
+ *
+ *  FAIL-SAFE: a file that can't be OCR'd is STILL captured (App Inbox row + photo
+ *  link, marked for review) — never skipped, never lost. Append-only; the financial
+ *  gate still HOLDs anything with an unreadable total.
+ *
+ *  SETUP: set EV_DRIVE_INTAKE.FOLDER_ID to the drop folder, then run
+ *  EV_installDriveIntake (hourly). One-shot: EV_driveIntakeNow().
+ * ============================================================================
+ */
+var EV_DRIVE_INTAKE = {
+  FOLDER_ID:    'YOUR_DRIVE_INTAKE_FOLDER_ID',   // the Drive folder crew/owner drop loose receipts into
+  FILED_SUBFOLDER: '✅ Filed by app',
+  MAX_PER_RUN:  25,                       // stay well within Drive OCR's per-user rate limit
+  TZ:           'America/Edmonton'
+};
+
+function EV_driveIntakeNow() { return EV_driveIntake_(); }
+
+/** Install the hourly Drive intake trigger if missing (called from the dispatch sweep so the
+ *  loose-receipt loop self-starts without an editor visit). Runs one pass on first install. */
+function EV_ensureDriveIntake_() {
+  if (String(EV_DRIVE_INTAKE.FOLDER_ID).indexOf('YOUR_') === 0) return; // not configured
+  var has = ScriptApp.getProjectTriggers().some(function (t) { return t.getHandlerFunction() === 'EV_driveIntake_'; });
+  if (has) return;
+  ScriptApp.newTrigger('EV_driveIntake_').timeBased().everyHours(1).create();
+  try { appLog_('DriveIntake', 'Self-installed hourly Drive intake trigger.'); } catch (e) {}
+  try { EV_driveIntake_(); } catch (e) {} // first pass immediately
+}
+
+function EV_installDriveIntake() {
+  if (String(EV_DRIVE_INTAKE.FOLDER_ID).indexOf('YOUR_') === 0) throw new Error('Set EV_DRIVE_INTAKE.FOLDER_ID to the drop folder first.');
+  ScriptApp.getProjectTriggers().forEach(function (t) { if (t.getHandlerFunction() === 'EV_driveIntake_') ScriptApp.deleteTrigger(t); });
+  ScriptApp.newTrigger('EV_driveIntake_').timeBased().everyHours(1).create();
+  return 'Drive intake installed (hourly) on folder ' + EV_DRIVE_INTAKE.FOLDER_ID;
+}
+
+/** New fixed-length submission id (matches Code.gs format; no id is a prefix of another). */
+function EV_newSubId_() {
+  return 'SUB-' + Utilities.formatDate(new Date(), EV_DRIVE_INTAKE.TZ, 'yyMMdd-HHmmss') + '-' + ('00' + Math.floor(Math.random() * 1000)).slice(-3);
+}
+
+/** Get OCR text from a Drive file: native OCR on the bytes; if that yields nothing
+ *  (e.g. HEIC), fall back to the Drive-generated JPEG thumbnail. Returns '' if unreadable. */
+function EV_ocrDriveFile_(file) {
+  try {
+    var blob = file.getBlob();
+    var r = EV_driveOcr_(blob.getBytes(), blob.getContentType());
+    if (r && r.text && r.text.trim()) return r.text;
+  } catch (e) {}
+  try {
+    var thumb = file.getThumbnail(); // JPEG, works for HEIC/HEIF where native OCR won't
+    if (thumb) { var r2 = EV_driveOcr_(thumb.getBytes(), 'image/jpeg'); if (r2 && r2.text) return r2.text; }
+  } catch (e2) {}
+  return '';
+}
+
+/** Classify OCR text into an App Inbox category.
+ *  HARDENED 2026-06-29: the old version returned 'receipt' for EVERYTHING that wasn't a quote/payment,
+ *  so a bulk photo dump of equipment, blast media, and safety labels flooded the receipt queue (49 stuck
+ *  rows on 2026-06-21). Now a real receipt requires an actual money signal; media/equipment/PPE photos go
+ *  to the inventory lane; safety placards/manuals to a reference lane; blank/unrecognized photos are logged.
+ *  Receipt is checked BEFORE equipment/media words so a genuine invoice from a compressor or media vendor
+ *  still files as a receipt. Validated against the 49-item backlog (35/35 samples). */
+function EV_classifyDoc_(text) {
+  var t = String(text || '').toLowerCase();
+  if (!t.trim()) return 'blank';
+  if (/scope of work|quote\s*#|contract value|project value|deposit\s*\(\d|quotation/.test(t)) return 'quote';
+  if (/interac|e-?transfer|etransfer|sent you|deposited|payment received|paid in full/.test(t)) return 'quick';
+  if (/(\$\s*\d|\bsubtotal\b|\bg\.?s\.?t\.?\b|\bhst\b|\binvoice\b|\bvisa\b|\bmastercard\b|\bdebit\b|amount\s*due|tendered|change\s*due|cash\s*\$?\s*\d)/.test(t)) return 'receipt';
+  if (/\bwarning\b|\bdanger\b|\bcaution\b|advertencia|avertissement|advertissement|operating instructions|do not |next service due|compatibility chart|administrator.?s guide|u\.s\.?gallons|gallons us/.test(t)) return 'label';
+  if (/silica|sil minerals|sil industrial|garnet|corn\s?cob|walnut|glass media|abrasive|blast media|soda blast|armex|\b20\/40\b|2040 grade/.test(t)) return 'inventory';
+  if (/mr\.?\s*heater|milwaukee|dewalt|makita|\bhusky\b|lefoo|respirator|cartridge|nozzle|deadman|compressor|generator|\baed\b|zoll|defibrillator|radex|king ranch|f-?350|\bford\b/.test(t)) return 'inventory';
+  return 'review';
+}
+
+/** Map a classification to an App Inbox {category label, status}. Receipts/quotes/payment notes enter the
+ *  filer as NEW; inventory/label/blank/unrecognized photos get a TERMINAL "LOGGED" status so they are
+ *  captured + categorized but never clog the receipt or needs-review queues (EV_fileInbox_ only touches
+ *  NEW / NEEDS REVIEW rows). */
+function EV_driveRoute_(cat) {
+  switch (cat) {
+    case 'receipt':   return { category: 'Receipt / Expense', status: 'NEW', terminal: false };
+    case 'quote':     return { category: 'Build a Quote',     status: 'NEW', terminal: false };
+    case 'quick':     return { category: 'Quick Capture',     status: 'NEW', terminal: false };
+    case 'inventory': return { category: 'Inventory / Photo',  status: 'LOGGED - inventory/equipment photo (no action)', terminal: true };
+    case 'label':     return { category: 'Reference Photo',    status: 'LOGGED - label/manual/sign (no action)',         terminal: true };
+    case 'blank':     return { category: 'Reference Photo',    status: 'LOGGED - photo, no readable text (no action)',   terminal: true };
+    default:          return { category: 'Reference Photo',    status: 'LOGGED - unrecognized photo (no receipt/lead/task signal)', terminal: true };
+  }
+}
+
+function EV_intakeFiledFolder_(drop) {
+  var it = drop.getFoldersByName(EV_DRIVE_INTAKE.FILED_SUBFOLDER);
+  return it.hasNext() ? it.next() : drop.createFolder(EV_DRIVE_INTAKE.FILED_SUBFOLDER);
+}
+
+/** Append a NEW 📥 App Inbox row shaped like a normal capture, so the existing filer routes it. */
+function EV_inboxAppendFromDrive_(book, category, summary, fields, photoLink, by, status) {
+  var inbox = EV_sheetEndingWith_(book, 'App Inbox'); if (!inbox) return null;
+  var H = inbox.getRange(1, 1, 1, inbox.getLastColumn()).getValues()[0];
+  var sub = EV_newSubId_();
+  var rowObj = {
+    'Timestamp': new Date(), 'Captured By': by || 'Drive intake', 'Category': category,
+    'Summary': summary || '', 'Details': JSON.stringify(fields || {}), 'Photo': photoLink || '',
+    'Status': status || 'NEW', 'Submission': sub, 'Raw Category': category
+  };
+  var arr = new Array(H.length).fill('');
+  for (var key in rowObj) { if (rowObj.hasOwnProperty(key)) { var ci = EV_colIndex_(H, key); if (ci >= 0) arr[ci] = EV_safeCell_(rowObj[key]); } }
+  inbox.appendRow(arr);
+  return sub;
+}
+
+/** Main intake pass. Returns a summary object. */
+function EV_driveIntake_() {
+  var lock = LockService.getScriptLock();
+  if (!lock.tryLock(5000)) return JSON.stringify({ skipped: 'locked' });
+  try {
+    if (String(EV_DRIVE_INTAKE.FOLDER_ID).indexOf('YOUR_') === 0) return JSON.stringify({ error: 'drop folder not configured' });
+    var book = SpreadsheetApp.openById(EV_FILER_SS_ID);
+    var drop = DriveApp.getFolderById(EV_DRIVE_INTAKE.FOLDER_ID);
+    var filed = EV_intakeFiledFolder_(drop);
+    // Collect ids FIRST (moving a file mid-getFiles()-iteration can skip the next one).
+    var it = drop.getFiles(), ids = [];
+    while (it.hasNext()) { var ff = it.next(); var mm = String(ff.getMimeType() || ''); if (mm.indexOf('image/') === 0 || mm === 'application/pdf') ids.push(ff.getId()); }
+    var processed = 0, captured = 0, review = 0, parked = 0, names = [];
+    for (var k = 0; k < ids.length && processed < EV_DRIVE_INTAKE.MAX_PER_RUN; k++) {
+      var f; try { f = DriveApp.getFileById(ids[k]); } catch (eGet) { continue; }
+      processed++;
+      var link = f.getUrl();
+      var text = EV_ocrDriveFile_(f);
+      var cat = EV_classifyDoc_(text);
+      var route = EV_driveRoute_(cat);
+      // Only run the receipt parser on actual receipts — stops OCR junk (e.g. "WARNING") becoming a "vendor".
+      var parsed = {}; try { parsed = (cat === 'receipt' && text ? EV_parseReceipt_(text) : {}); } catch (e) { parsed = {}; }
+      var fields = {
+        vendor: parsed.vendor || '', total: parsed.total || '', gst: parsed.gst || '', date: parsed.date || '',
+        about: cat, source: 'Drive intake (' + f.getName() + ')', ocr_chars: String(text).length
+      };
+      var summary = (parsed.vendor ? parsed.vendor : f.getName()) + (parsed.total ? (' $' + parsed.total) : '');
+      try {
+        var sub = EV_inboxAppendFromDrive_(book, route.category, summary, fields, link, 'Drive intake', route.status);
+        captured++;
+        if (route.terminal) parked++; else if (!text) review++;
+        // move out of the drop folder so it isn't reprocessed
+        try { f.moveTo(filed); } catch (eMove) { try { filed.addFile(f); drop.removeFile(f); } catch (e2) {} }
+        names.push(f.getName() + '->' + cat + (route.terminal ? ' (logged)' : (text ? '' : ' (no OCR)')));
+      } catch (eRow) { /* leave the file in place to retry next run */ }
+    }
+    if (captured) { try { EV_fileInbox_(); } catch (e) {} } // route the new rows immediately
+    var msg = 'Drive intake: ' + captured + ' captured (' + parked + ' logged/parked, ' + review + ' need review), ' + processed + ' scanned [' + names.join('; ').slice(0, 250) + ']';
+    if (processed) { try { appLog_('DriveIntake', msg); } catch (e) {} }
+    return JSON.stringify({ captured: captured, review: review, scanned: processed });
+  } catch (err) {
+    try { appLog_('DriveIntake', 'ERROR: ' + err); } catch (e) {}
+    return JSON.stringify({ error: String(err) });
+  } finally { try { lock.releaseLock(); } catch (e) {} }
+}

@@ -78,6 +78,7 @@ function EV_runBackup() {
 
 /** One-time installer: idempotent. Creates the 3-day trigger + first backup. */
 function EV_installBackups() {
+  if (typeof EV_requireConfigured_ === 'function') EV_requireConfigured_();   // E-4: refuse while placeholders remain
   ScriptApp.getProjectTriggers().forEach(function (t) {
     if (t.getHandlerFunction() === 'EV_runBackup') ScriptApp.deleteTrigger(t);
   });

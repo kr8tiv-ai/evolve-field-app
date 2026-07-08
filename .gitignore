@@ -1,0 +1,23 @@
+# ── Secrets & deploy config — NEVER commit ─────────────────────────────
+.clasp.json                 # contains the private Apps Script scriptId
+.clasprc.json
+deploy-local/               # generated copies with real IDs filled in
+*.local
+*.secret
+.env
+.env.*
+secrets.json
+router-url.txt
+*-secret*.txt
+
+# ── Local build / preview artifacts ────────────────────────────────────
+_*.html                     # local PDF/email preview renders
+_*.md                       # local audit/research notes
+*_preview.*
+
+# ── OS / editor ────────────────────────────────────────────────────────
+node_modules/
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/

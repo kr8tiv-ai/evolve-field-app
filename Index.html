@@ -236,6 +236,53 @@ textarea{min-height:96px;resize:vertical;line-height:1.5}
 .tag{font-size:.6rem;letter-spacing:.1em;text-transform:uppercase;padding:3px 8px;border-radius:999px;background:rgba(255,255,255,.08);color:var(--dim)}
 .tag.admin{background:var(--lime-dim);color:var(--lime)}
 footer{text-align:center;padding:30px 0 10px;color:var(--faint);font-size:.66rem;letter-spacing:.16em;text-transform:uppercase}
+
+/* ===== FLHA / SAFETY ===== */
+:root{--safety:#ff7a00;--safety-dim:rgba(255,122,0,.12);--safety-glow:rgba(255,122,0,.5)}
+.hero-tile.safety{background:linear-gradient(135deg,rgba(255,122,0,.18),rgba(255,122,0,.04));border-color:rgba(255,122,0,.5)}
+.hero-tile.safety:hover{box-shadow:0 12px 40px rgba(255,122,0,.2)}
+.hero-tile.safety .go{color:var(--safety)}
+.hero-tile.safety .em{color:var(--safety);text-shadow:0 0 18px var(--safety-glow)}
+.chips{display:flex;flex-wrap:wrap;gap:8px;margin-top:4px}
+.chip{background:var(--surface);border:1px solid var(--border);color:var(--dim);border-radius:999px;
+  padding:11px 15px;font-size:.84rem;cursor:pointer;transition:.15s var(--ease);user-select:none;line-height:1.15}
+.chip:active{transform:scale(.96)}
+.chip.on{background:var(--lime-dim);border-color:var(--lime);color:var(--lime);font-weight:500}
+.risk3{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:6px}
+.risk{background:var(--surface-2);border:1px solid var(--border);color:var(--dim);border-radius:var(--radius-sm);
+  padding:15px 6px;font-family:var(--font);font-size:.9rem;font-weight:600;text-transform:uppercase;letter-spacing:.06em;cursor:pointer;transition:.15s}
+.risk small{display:block;font-size:.6rem;font-weight:400;letter-spacing:.02em;color:var(--faint);margin-top:3px;text-transform:none}
+.risk.on.low{background:rgba(10,180,80,.18);border-color:#0ab450;color:#5be08d}
+.risk.on.med{background:rgba(210,140,0,.2);border-color:#e0a000;color:#ffcc54}
+.risk.on.high{background:rgba(200,0,32,.22);border-color:#ff4d4d;color:#ff7a7a}
+.flha-warn{margin-top:12px;padding:14px 16px;border-radius:12px;background:rgba(200,0,32,.14);
+  border:1px solid rgba(255,80,80,.5);color:#ff9a9a;font-size:.86rem;line-height:1.5}
+.flha-warn label{display:flex;align-items:center;gap:10px;margin-top:10px;color:var(--text);font-size:.86rem;cursor:pointer}
+.flha-warn input{width:auto;margin:0}
+.eqrow{display:flex;align-items:center;gap:10px;padding:11px 0;border-bottom:1px solid var(--border)}
+.eqrow .eql{flex:1;font-size:.9rem;color:var(--text)}
+.eqrow .toggle{flex:0 0 168px}
+.eqrow .toggle button{padding:9px}
+.sigwrap{display:flex;flex-direction:column;gap:8px;margin:4px 0 12px}
+.sig-chip{display:flex;align-items:center;gap:10px;background:var(--lime-dim);border:1px solid rgba(0,255,65,.35);
+  border-radius:12px;padding:11px 14px;font-size:.88rem}
+.sig-chip .sic{color:var(--lime);font-size:1.1rem}
+.sig-chip .snm{font-weight:600}
+.sig-chip small{display:block;color:var(--dim);font-size:.7rem;font-weight:300}
+.sig-empty{color:var(--faint);font-size:.84rem;padding:8px 2px}
+/* hazard escalation */
+:root{--danger:#ff4d4d;--danger-dim:rgba(255,77,77,.12);--danger-glow:rgba(255,77,77,.5)}
+.hero-tile.hazard{background:linear-gradient(135deg,rgba(255,77,77,.16),rgba(255,77,77,.04));border-color:rgba(255,77,77,.5)}
+.hero-tile.hazard:hover{box-shadow:0 12px 40px rgba(255,77,77,.2)}
+.hero-tile.hazard .go{color:var(--danger)}
+.hero-tile.hazard .em{color:var(--danger);text-shadow:0 0 18px var(--danger-glow)}
+.sev4{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-top:6px}
+.sev{background:var(--surface-2);border:1px solid var(--border);color:var(--dim);border-radius:var(--radius-sm);
+  padding:14px 4px;font-family:var(--font);font-size:.82rem;font-weight:600;text-transform:uppercase;letter-spacing:.04em;cursor:pointer;transition:.15s;text-align:center}
+.sev.on.low{background:rgba(74,222,128,.18);border-color:#4ade80;color:#8ef0a8}
+.sev.on.med{background:rgba(224,160,0,.2);border-color:#e0a000;color:#ffcc54}
+.sev.on.high{background:rgba(255,77,77,.2);border-color:#ff4d4d;color:#ff7a7a}
+.sev.on.crit{background:rgba(255,45,45,.28);border-color:#ff2d2d;color:#ff9a9a;box-shadow:0 0 16px rgba(255,45,45,.4)}
 </style>
 </head>
 <body>
@@ -300,6 +347,20 @@ footer{text-align:center;padding:30px 0 10px;color:var(--faint);font-size:.66rem
         <p>Not sure where it goes? Just snap it and say what it is — Claude figures out the rest.</p>
       </div>
 
+      <div class="hero-tile safety" onclick="openFlha()" style="margin-top:12px">
+        <div class="go">→</div>
+        <div class="big">🦺</div>
+        <h2>START <span class="em">FLHA</span></h2>
+        <p>Field Level Hazard Assessment — do this every morning before work starts. Every worker signs with their own PIN.</p>
+      </div>
+
+      <div class="hero-tile hazard" onclick="openHazard()" style="margin-top:12px">
+        <div class="go">→</div>
+        <div class="big">⚠️</div>
+        <h2>REPORT A <span class="em">HAZARD</span></h2>
+        <p>See a hazard, near-miss or problem? Flag it in seconds — it emails Matt &amp; Todd right away.</p>
+      </div>
+
       <div class="sec-label"><span class="bar"></span><span>Log Something</span></div>
       <div class="grid" id="tiles"></div>
 
@@ -319,6 +380,117 @@ footer{text-align:center;padding:30px 0 10px;color:var(--faint);font-size:.66rem
       <div id="fFields"></div>
       <div class="sticky-submit">
         <button class="btn" id="submitBtn" onclick="submitForm()">Save It</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- FLHA / SAFETY -->
+  <section id="flha" class="screen">
+    <div class="wrap">
+      <button class="back" onclick="goHome()">← Back</button>
+      <div class="form-head"><div class="ic">🦺</div><h2>FIELD LEVEL<br>HAZARD ASSESSMENT</h2></div>
+      <p class="dim" style="margin:2px 2px 0;font-size:.88rem">Fill this out at the job or shop <b>before work starts</b>. Tap what applies. Every worker signs at the bottom.</p>
+
+      <div class="field"><label class="fld">Location / site address <span class="req">*</span></label><input id="fl_location" placeholder="e.g. 10824 67 Ave, Edmonton"></div>
+      <div class="row2 field">
+        <div><label class="fld">Date</label><input id="fl_date" type="date"></div>
+        <div><label class="fld">Field or Shop</label><div class="toggle" id="fl_place">
+          <button type="button" data-v="Field" onclick="flPlace(this)">Field</button>
+          <button type="button" data-v="Shop" onclick="flPlace(this)">Shop</button>
+        </div></div>
+      </div>
+      <div class="field"><label class="fld">Job / task <span class="req">*</span></label><input id="fl_job" placeholder="e.g. dustless blast + profile aggregate driveway"></div>
+
+      <div class="sec-label"><span class="bar"></span><span>Weather / conditions — tap all that apply</span></div>
+      <div class="chips" id="fl_weather"></div>
+
+      <div class="sec-label"><span class="bar"></span><span>Hazards present today — tap all that apply</span></div>
+      <div class="chips" id="fl_hazards"></div>
+      <div class="field"><label class="fld">Other hazards on site</label><input id="fl_hazOther" placeholder="anything not listed above"></div>
+
+      <div class="sec-label"><span class="bar"></span><span>Overall risk after controls</span></div>
+      <div class="risk3" id="fl_risk">
+        <button type="button" class="risk low" data-v="Low" onclick="flRisk(this)">Low<small>proceed</small></button>
+        <button type="button" class="risk med" data-v="Medium" onclick="flRisk(this)">Med<small>add controls</small></button>
+        <button type="button" class="risk high" data-v="High" onclick="flRisk(this)">High<small>stop / get OK</small></button>
+      </div>
+      <div class="flha-warn" id="fl_riskWarn" style="display:none">
+        ⚠ <b>High risk.</b> Do not start until controls bring it down. If you must proceed, a supervisor has to approve it.
+        <label><input type="checkbox" id="fl_riskAck"> A supervisor has approved starting this work</label>
+      </div>
+
+      <div class="sec-label"><span class="bar"></span><span>Controls — what we did <span style="text-transform:none;letter-spacing:0;color:var(--faint)">(eliminate → substitute → engineer → admin → PPE)</span></span></div>
+      <div class="chips" id="fl_controls"></div>
+      <div class="field"><label class="fld">Other controls / mitigations</label><textarea id="fl_controlsNote" placeholder="Anything else you did to make it safe"></textarea></div>
+
+      <div class="field"><label class="fld">Job-specific hazards &amp; what we did <span class="req">*</span></label>
+        <textarea id="fl_jobHaz" placeholder="One thing specific to THIS site today — e.g. old painted surface, assume lead; neighbour's cars 3 m away, taped off; slope to storm drain, contained."></textarea>
+        <div class="hint">Required — this is what proves the FLHA is real for today's site, not a copy-paste.</div>
+      </div>
+
+      <div class="sec-label"><span class="bar"></span><span>Setup / equipment check</span></div>
+      <div id="fl_equip"></div>
+
+      <div class="sec-label"><span class="bar"></span><span>PPE on site — tap all worn</span></div>
+      <div class="chips" id="fl_ppe"></div>
+
+      <div class="sec-label"><span class="bar"></span><span>Site photos (optional)</span></div>
+      <div class="photo-zone" onclick="document.getElementById('fl_photoInput').click()">
+        <div class="pic">📷</div><div class="t">Add site photos</div><div class="s">Containment, hazards, setup — camera or library</div>
+      </div>
+      <input id="fl_photoInput" type="file" accept="image/*" multiple style="display:none" onchange="handlePhotos(this.files,'flha')">
+      <div class="thumbs" id="thumbs_flha"></div>
+
+      <div class="sec-label"><span class="bar"></span><span>Emergency info (optional)</span></div>
+      <div class="row2 field">
+        <div><label class="fld">Nearest hospital</label><input id="fl_hospital" placeholder="e.g. Grey Nuns"></div>
+        <div><label class="fld">Muster point</label><input id="fl_muster" placeholder="e.g. front of truck"></div>
+      </div>
+      <div class="field"><label class="fld">First aider on site</label><input id="fl_firstaid" placeholder="who / kit location"></div>
+
+      <div class="sec-label"><span class="bar"></span><span>Worker sign-off <span class="req">*</span></span></div>
+      <div class="infobox"><span class="ii">✍</span><span>Each worker on the job today signs with their <b>own PIN</b>. By signing you confirm: you understand the hazards, you're properly trained for your task, and you have the proper PPE.</span></div>
+      <div id="fl_sigs" class="sigwrap"></div>
+      <button class="btn sec" type="button" onclick="flhaOpenSign()">＋ Add worker sign-off</button>
+
+      <div class="sticky-submit">
+        <button class="btn" id="flhaSubmitBtn" onclick="flhaSubmit()">Submit FLHA</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- HAZARD / ISSUE ESCALATION -->
+  <section id="hazard" class="screen">
+    <div class="wrap">
+      <button class="back" onclick="goHome()">← Back</button>
+      <div class="form-head"><div class="ic">⚠️</div><h2>REPORT A HAZARD</h2></div>
+      <p class="dim" style="margin:2px 2px 0;font-size:.88rem">Flag a hazard, near-miss or problem. This emails <b>Matt &amp; Todd</b> right away — no sign-off needed.</p>
+
+      <div class="sec-label"><span class="bar"></span><span>How serious is it?</span></div>
+      <div class="sev4" id="hz_sev">
+        <button type="button" class="sev low" data-v="Low" onclick="hzSev(this)">Low</button>
+        <button type="button" class="sev med" data-v="Medium" onclick="hzSev(this)">Med</button>
+        <button type="button" class="sev high" data-v="High" onclick="hzSev(this)">High</button>
+        <button type="button" class="sev crit" data-v="Critical" onclick="hzSev(this)">Critical</button>
+      </div>
+
+      <div class="sec-label"><span class="bar"></span><span>What kind of hazard? — tap one</span></div>
+      <div class="chips" id="hz_type"></div>
+
+      <div class="field"><label class="fld">What's going on? <span class="req">*</span></label>
+        <textarea id="hz_desc" placeholder="e.g. Compressor hose has a bad fitting and is leaking — took it out of service. Need a replacement before we can run the second pot."></textarea>
+      </div>
+      <div class="field"><label class="fld">Where</label><input id="hz_location" placeholder="job site / address / area"></div>
+
+      <div class="sec-label"><span class="bar"></span><span>Photo (optional)</span></div>
+      <div class="photo-zone" onclick="document.getElementById('hz_photoInput').click()">
+        <div class="pic">📷</div><div class="t">Add a photo</div><div class="s">Show the issue — camera or library</div>
+      </div>
+      <input id="hz_photoInput" type="file" accept="image/*" multiple style="display:none" onchange="handlePhotos(this.files,'hazard')">
+      <div class="thumbs" id="thumbs_hazard"></div>
+
+      <div class="sticky-submit">
+        <button class="btn" id="hzSubmitBtn" onclick="hazardSubmit()" style="background:var(--danger);border-color:var(--danger)">Send to Management</button>
       </div>
     </div>
   </section>
@@ -360,6 +532,28 @@ footer{text-align:center;padding:30px 0 10px;color:var(--faint);font-size:.66rem
   </div>
 </div>
 
+<!-- FLHA sign-off modal -->
+<div class="modal" id="signModal">
+  <div class="sheet">
+    <div style="display:flex;align-items:center"><h2>Sign the FLHA</h2>
+      <button class="ghost-btn" style="margin-left:auto" onclick="flhaCloseSign()">Close</button></div>
+    <p class="dim" style="font-size:.86rem;line-height:1.5;margin-top:10px">By signing you confirm you <b>understand the hazards</b>, you're <b>trained for your task</b>, and you have the <b>proper PPE</b>. Use your own PIN — this is your signature.</p>
+    <div class="field"><label class="fld">Your name</label><select id="signName"><option value="">Select your name…</option></select></div>
+    <label class="fld" style="margin-top:16px">Your 4-digit PIN</label>
+    <div class="pin-display" id="signPin">
+      <div class="pin-dot" data-i="0"></div><div class="pin-dot" data-i="1"></div>
+      <div class="pin-dot" data-i="2"></div><div class="pin-dot" data-i="3"></div>
+    </div>
+    <div class="keypad" id="signKeypad">
+      <button class="key" data-sk="1">1</button><button class="key" data-sk="2">2</button><button class="key" data-sk="3">3</button>
+      <button class="key" data-sk="4">4</button><button class="key" data-sk="5">5</button><button class="key" data-sk="6">6</button>
+      <button class="key" data-sk="7">7</button><button class="key" data-sk="8">8</button><button class="key" data-sk="9">9</button>
+      <button class="key fn" data-sk="clear">Clear</button><button class="key" data-sk="0">0</button><button class="key fn" data-sk="del">⌫</button>
+    </div>
+    <button class="btn" id="signBtn" style="margin-top:16px" onclick="flhaDoSign()" disabled>Sign &amp; add me</button>
+  </div>
+</div>
+
 <!-- capture detail modal -->
 <div class="modal" id="capModal">
   <div class="sheet">
@@ -392,7 +586,7 @@ footer{text-align:center;padding:30px 0 10px;color:var(--faint);font-size:.66rem
   var recent=[
     {time:'Jun 8, 9:14 AM',by:'Jesse',category:'Receipt / Expense',summary:'Consolidated Compressor · $350.00',hasPhoto:true,status:'FILED',filedTo:'Expenses'},
     {time:'Jun 8, 8:02 AM',by:'Todd',category:'Job Photo',summary:'Al\'s Atomic — driveway before',hasPhoto:true,status:'NEW',filedTo:''},
-    {time:'Jun 7, 4:48 PM',by:'Matt',category:'New Lead',summary:'587-783-3302 · Leduc full property',hasPhoto:false,status:'FILED',filedTo:'Leads'}
+    {time:'Jun 7, 4:48 PM',by:'Matt',category:'New Lead',summary:'780-555-0142 · Leduc full property',hasPhoto:false,status:'FILED',filedTo:'Leads'}
   ];
   var R={};
   function makeRunner(){var ctx={s:null,f:null};
@@ -409,7 +603,7 @@ footer{text-align:center;padding:30px 0 10px;color:var(--faint);font-size:.66rem
       {id:'SUB-7',time:'Jun 15, 2026 · 10:21 PM',by:'Matt',category:'Receipt / Expense',summary:'Home Hardware · $170.71',status:'FILED',filedTo:'Expenses!row18',location:'Edmonton, AB',fields:{date:'2026-06-15',vendor:'Home Hardware',total:'170.71',what:'Fasteners, tarp',category:'Shop supplies'},photoLinks:['https://drive.google.com/demo-receipt']},
       {id:'SUB-6',time:'Jun 15, 2026 · 10:16 PM',by:'Matt',category:'Receipt / Expense',summary:'Shell Canada · $40',status:'FILED',filedTo:'Expenses!row17',location:'Edmonton, AB',fields:{date:'2026-06-15',vendor:'Shell Canada',total:'40.00',what:'Diesel',category:'Fuel / Diesel'},photoLinks:['https://drive.google.com/demo-receipt']},
       {id:'SUB-5',time:'Jun 15, 2026 · 10:12 PM',by:'Matt',category:'Receipt / Expense',summary:'Canadian Tire · $209.99',status:'FILED',filedTo:'Expenses!row14',location:'Edmonton, AB',fields:{date:'2026-06-15',vendor:'Canadian Tire',total:'209.99',what:'Nozzles, PPE'},photoLinks:['https://drive.google.com/demo-receipt']},
-      {id:'SUB-4',time:'Jun 14, 2026 · 4:48 PM',by:'Matt',category:'New Lead',summary:'587-783-3302 · Leduc full property',status:'FILED',filedTo:'Leads',fields:{phone:'587-783-3302',service:'Full property blast',address:'Leduc'},photoLinks:[]},
+      {id:'SUB-4',time:'Jun 14, 2026 · 4:48 PM',by:'Matt',category:'New Lead',summary:'780-555-0142 · Leduc full property',status:'FILED',filedTo:'Leads',fields:{phone:'780-555-0142',service:'Full property blast',address:'Leduc'},photoLinks:[]},
       {id:'SUB-3',time:'Jun 14, 2026 · 2:02 PM',by:'Todd',category:'Job Photo',summary:'Al\'s Atomic — driveway before',status:'NEW',fields:{customer:'Al\'s Atomic',stage:'Before'},photoLinks:['https://drive.google.com/demo-photo']},
       {id:'SUB-2',time:'Jun 13, 2026 · 9:14 AM',by:'Jesse',category:'Receipt / Expense',summary:'Consolidated Compressor · $350.00',status:'FILED',filedTo:'Expenses',fields:{vendor:'Consolidated Compressor',total:'350.00',what:'Compressor service'},photoLinks:['https://drive.google.com/demo-receipt']},
       {id:'SUB-1',time:'Jun 12, 2026 · 8:00 AM',by:'Todd',category:'Request / Report',summary:'Add a daily truck-check button',status:'NEEDS REVIEW',fields:{request_type:'New feature',description:'Add a daily truck-check button',priority:'Medium'},photoLinks:[]}
@@ -420,6 +614,9 @@ footer{text-align:center;padding:30px 0 10px;color:var(--faint);font-size:.66rem
   R.apiOcrReceipt=function(){return {ok:true,fields:{date:'2026-05-22',vendor:'Esso 7-ELEVEN 37836',total:'150.00',gst:'7.14'},chars:829};};
   R.apiAddUser=function(t,n){return {ok:true,message:n+' added (demo).'};};
   R.apiListUsers=function(){return {ok:true,users:[{name:'Todd',role:'admin',active:'Yes'},{name:'Matt',role:'admin',active:'Yes'},{name:'Jesse',role:'crew',active:'Yes'}]};};
+  R.apiFlhaSign=function(n,p){return (p&&p.length===4)?{ok:true,name:n,role:(n==='Todd'||n==='Matt')?'admin':'crew',ts:Date.now(),sig:'demo-'+n}:{ok:false,error:'Wrong PIN.'};};
+  R.apiFlhaSubmit=function(pl){return {ok:true,id:'FLHA-DEMO-01',pdfUrl:'',emailed:false,signers:((pl&&pl.signatures)||[]).map(function(s){return s.name;}),message:'FLHA logged (demo).'};};
+  R.apiHazardReport=function(pl){return {ok:true,id:'HZ-DEMO-01',emailed:false,message:'Reported to management (demo).'};};
   var scriptObj={}; Object.defineProperty(scriptObj,'run',{get:function(){return makeRunner();}});
   window.google={script:scriptObj};
   window.__DEMO__=true;
@@ -656,7 +853,7 @@ function a2hsGotIt(){closeA2HS();dismissA2HS();}
 
 /* ================= login ========= */
 function buildKeypad(){
-  document.querySelectorAll('.key').forEach(function(b){
+  document.querySelectorAll('#login .key').forEach(function(b){   // login keypad only — FLHA sign keypad wires itself (data-sk)
     b.addEventListener('click',function(){
       var k=b.dataset.k;
       if(k==='clear')S.pin='';
@@ -667,7 +864,7 @@ function buildKeypad(){
   });
 }
 function renderPin(){
-  document.querySelectorAll('.pin-dot').forEach(function(d,i){d.classList.toggle('on',i<S.pin.length);});
+  document.querySelectorAll('#login .pin-dot').forEach(function(d,i){d.classList.toggle('on',i<S.pin.length);});
   checkLoginReady();
 }
 function checkLoginReady(){
@@ -1053,13 +1250,18 @@ function evFlushOutbox(manual){
       var en=list[i++];
       function send(links){
         var payload={token:S.token,clientId:en.clientId,category:en.category,summary:en.summary,fields:en.fields,photoLinks:links,gps:en.gps,device:en.device};
-        call('apiSubmit',[payload],function(res){ if(res&&res.ok){ sent++; evOutboxDel(en.clientId,next); } else { next(); } }, function(){ EV_flushing=false; evBadge(); });
+        // C-4: one failed entry must not block the rest — on error, skip to the next (entry stays queued).
+        call('apiSubmit',[payload],function(res){ if(res&&res.ok){ sent++; evOutboxDel(en.clientId,next); } else { next(); } }, function(){ next(); });
       }
       if(en.links){ send(en.links); }
-      else { uploadQueue((en.photos||[]).map(function(p){return {p:p,tag:p.tag||''};}),0,[],0,function(links){ send(links); }); }
+      // C-2: atomic on flush too — if a photo still won't upload, keep the entry and retry later.
+      else { uploadQueue((en.photos||[]).map(function(p){return {p:p,tag:p.tag||''};}),0,[],0,function(links,failed){ if(failed){ next(); } else { send(links); } }); }
     })();
   });
 }
+// C-4: periodic background flush so a capture saved offline still sends even if the 'online'
+// event never fires (some mobile WebViews) and the app is left open.
+try{ if(typeof window!=='undefined' && !window.__evFlushTimer){ window.__evFlushTimer=setInterval(function(){ try{ if(navigator.onLine && typeof S!=='undefined' && S.token && !EV_flushing) evFlushOutbox(false); }catch(e){} }, 60000); } }catch(e){}
 function submitForm(){
   var c=collect();
   if(c.missing.length){toast('Please fill: '+c.missing.join(', '),true);return;}
@@ -1068,11 +1270,26 @@ function submitForm(){
   var photos=[]; S.cat.fields.forEach(function(f){ if(f.type==='photo'){ (S.photos[f.k]||[]).forEach(function(p){ photos.push({name:p.name,mimeType:p.mimeType,data:p.data,tag:f.tag||''}); }); } });
   var entry={clientId:cid,category:S.cat.id,summary:buildSummary(c.fields),fields:c.fields,gps:S.gps,device:navigator.userAgent,photos:photos,ts:Date.now()};
   if(!navigator.onLine){
-    evOutboxPut(entry,function(){ btn.disabled=false; goHome(); evBadge(); toast('You\'re offline — saved on this phone. It\'ll send automatically when you reconnect.'); });
+    // C-3: only report success if the phone actually persisted it. If IndexedDB is unavailable
+    // (private mode / storage full), keep the user on the form and warn — never a false "saved".
+    evOutboxPut(entry,function(ok){ btn.disabled=false;
+      if(ok){ goHome(); evBadge(); toast('You\'re offline — saved on this phone. It\'ll send automatically when you reconnect.'); }
+      else { toast('Couldn\'t save on this phone (private mode or storage full). Stay on this screen and try again, or screenshot your entry.',true); }
+    });
     return;
   }
   var queue=gatherPhotos();
   uploadQueue(queue,0,[],0,function(links,failed){
+    if(failed){
+      // C-2: never file a receipt/job photo capture WITHOUT its photo. Queue the whole capture (with
+      // the raw photos) and let the outbox retry the uploads. Atomic: all photos in, or fully queued.
+      hideOverlay();
+      evOutboxPut(entry,function(ok){ btn.disabled=false;
+        if(ok){ goHome(); evBadge(); toast(failed+' photo'+(failed>1?'s':'')+' didn\'t upload — saved on this phone, it\'ll finish sending automatically. Nothing lost.',true); }
+        else { toast('A photo wouldn\'t upload and the phone couldn\'t save it. Stay on this screen and try again.',true); }
+      });
+      return;
+    }
     var payload={token:S.token,clientId:cid,category:entry.category,summary:entry.summary,fields:entry.fields,photoLinks:links,gps:S.gps,device:entry.device};
     showOverlay('Saving…');
     call('apiSubmit',[payload],function(res){
@@ -1080,14 +1297,13 @@ function submitForm(){
       if(!res||!res.ok){
         hideOverlay();
         if(/sign in/i.test((res&&res.error)||'')){ toast(res.error,true); signOut(); return; }
-        evOutboxPut(entry,function(){ goHome(); evBadge(); toast('Saved on this phone — the server couldn\'t finish, it\'ll retry automatically. Nothing lost.',true); });
+        evOutboxPut(entry,function(ok){ if(ok){ goHome(); evBadge(); } toast(ok?'Saved on this phone — the server couldn\'t finish, it\'ll retry automatically. Nothing lost.':'Could not save on this phone — please try again.',true); });
         return;
       }
-      var msg=res.message||'Saved.';if(failed)msg+=' — note: '+failed+' photo'+(failed>1?'s':'')+' didn\'t upload';
-      showSuccess(msg);
+      showSuccess(res.message||'Saved.');
     },function(e){
       btn.disabled=false; hideOverlay();
-      evOutboxPut(entry,function(){ goHome(); evBadge(); toast('No connection — saved on this phone. It\'ll send automatically. Nothing lost.',true); });
+      evOutboxPut(entry,function(ok){ if(ok){ goHome(); evBadge(); } toast(ok?'No connection — saved on this phone. It\'ll send automatically. Nothing lost.':'No connection and couldn\'t save — please try again.',true); });
     });
   });
 }
@@ -1153,6 +1369,200 @@ function addUser(){
   call('apiAddUser',[S.token,n,p,r],function(res){
     if(!res.ok){toast(res.error,true);return;}
     toast(res.message);document.getElementById('newName').value='';document.getElementById('newPin').value='';refreshUsers();
+  });
+}
+
+/* ================= FLHA / SAFETY ========= */
+var FLHA_HAZARDS=['Silica / respirable dust','Lead / hazardous coatings','Noise','Compressed air / hose whip','Flying debris / eye injury','Media / abrasive handling','Slips / trips / falls','Public / traffic nearby','Overspray / containment','Lockout / stored energy','Manual handling / lifting','Working at heights','Power / electrical','Fumes / solvents','Confined space','Overhead / underground lines','Sharp edges / metal','Heat stress','Cold / ice','Sun / UV exposure','Working alone','Poor housekeeping','Wildlife / animals','WHMIS / SDS on site'];
+var FLHA_CONTROLS=['Wet / dustless method','Low-silica media','Containment / shrouds','Water suppression','Whip checks + deadman','Exclusion zone / barriers','Signage posted','Spotter / flagger','SDS reviewed','Lockout / tag-out','Ventilation','Housekeeping / clear paths','Supplied-air blast hood','Hearing protection','Eye / face protection','Gloves','Coveralls','Bystanders cleared','Rest / hydration breaks','Fall protection'];
+var FLHA_PPE=['Blast hood / supplied air','Respirator','Hearing protection','Eye / face','Gloves','Coveralls','Steel-toe boots','Hi-vis','Hard hat','Fall harness'];
+var FLHA_WEATHER=['Clear','Cloudy','Rain','Snow','Windy','Hot','Cold','Icy'];
+var FLHA_EQUIP=[['setup','Equipment set up properly'],['whipChecks','Whip checks installed'],['oRings','O-rings inspected'],['compressor','Compressor inspected'],['containment','Adequate containment'],['deadman','Deadman / safety valves work'],['couplings','Hoses / couplings secure'],['firstAid','First-aid kit on site'],['extinguisher','Fire extinguisher on site'],['mitigated','All risks mitigated']];
+var FL={place:'',risk:'',hazards:{},controls:{},ppe:{},weather:{},equip:{},sigs:[],signPin:''};
+
+function openFlha(){
+  FL={place:'',risk:'',hazards:{},controls:{},ppe:{},weather:{},equip:{},sigs:[],signPin:''};
+  S.photos['flha']=[];
+  ['fl_location','fl_job','fl_hazOther','fl_controlsNote','fl_jobHaz','fl_hospital','fl_muster','fl_firstaid'].forEach(function(id){var e=document.getElementById(id);if(e)e.value='';});
+  var ack=document.getElementById('fl_riskAck'); if(ack)ack.checked=false;
+  document.getElementById('fl_riskWarn').style.display='none';
+  var d=new Date(); document.getElementById('fl_date').value=d.getFullYear()+'-'+('0'+(d.getMonth()+1)).slice(-2)+'-'+('0'+d.getDate()).slice(-2);
+  document.querySelectorAll('#fl_place button').forEach(function(b){b.classList.remove('on');});
+  document.querySelectorAll('#fl_risk .risk').forEach(function(b){b.classList.remove('on');});
+  flChips('fl_hazards',FLHA_HAZARDS,FL.hazards);
+  flChips('fl_controls',FLHA_CONTROLS,FL.controls);
+  flChips('fl_ppe',FLHA_PPE,FL.ppe);
+  flChips('fl_weather',FLHA_WEATHER,FL.weather);
+  flEquip();
+  renderThumbs('flha');
+  flPopulateSignNames();
+  renderSigs();
+  switchScreen('flha');
+}
+/* generic photo uploader for FLHA / hazard screens (reuses apiUploadPhoto) */
+function flUploadPhotos(key,cat,cb){
+  var q=(S.photos[key]||[]).slice(); if(!q.length){cb([],0);return;}
+  var links=[],failed=0;
+  (function next(i){
+    if(i>=q.length){cb(links,failed);return;}
+    showOverlay('Uploading photo '+(i+1)+' of '+q.length+'…');
+    var p=q[i];
+    call('apiUploadPhoto',[{token:S.token,category:cat,photo:{name:p.name,mimeType:p.mimeType,data:p.data}}],
+      function(res){ if(res&&res.ok&&res.link)links.push(res.link); else failed++; next(i+1); },
+      function(){ failed++; next(i+1); });
+  })(0);
+}
+function flChips(containerId,list,store){
+  var box=document.getElementById(containerId);box.innerHTML='';
+  list.forEach(function(label){
+    var c=document.createElement('div');c.className='chip';c.textContent=label;
+    c.onclick=function(){ if(store[label]){delete store[label];c.classList.remove('on');} else {store[label]=1;c.classList.add('on');} };
+    box.appendChild(c);
+  });
+}
+function flEquip(){
+  var box=document.getElementById('fl_equip');box.innerHTML='';
+  FLHA_EQUIP.forEach(function(pair){
+    var key=pair[0],label=pair[1];
+    var row=document.createElement('div');row.className='eqrow';
+    var l=document.createElement('div');l.className='eql';l.textContent=label;
+    var tg=document.createElement('div');tg.className='toggle';
+    ['Yes','N/A'].forEach(function(v){
+      var b=document.createElement('button');b.type='button';b.textContent=v;
+      b.onclick=function(){ FL.equip[key]=v; tg.querySelectorAll('button').forEach(function(x){x.classList.remove('on');}); b.classList.add('on'); };
+      tg.appendChild(b);
+    });
+    row.appendChild(l);row.appendChild(tg);box.appendChild(row);
+  });
+}
+function flPlace(btn){ FL.place=btn.dataset.v; document.querySelectorAll('#fl_place button').forEach(function(b){b.classList.remove('on');}); btn.classList.add('on'); }
+function flRisk(btn){ FL.risk=btn.dataset.v; document.querySelectorAll('#fl_risk .risk').forEach(function(b){b.classList.remove('on');}); btn.classList.add('on');
+  document.getElementById('fl_riskWarn').style.display=(FL.risk==='High')?'block':'none';
+  if(FL.risk!=='High'){var a=document.getElementById('fl_riskAck');if(a)a.checked=false;}
+}
+
+/* sign-off — each worker authenticates with their OWN PIN */
+function flPopulateSignNames(){
+  var sel=document.getElementById('signName'); if(!sel)return;
+  sel.innerHTML='<option value="">Select your name…</option>';
+  (S.cfg.users||[]).forEach(function(n){var o=document.createElement('option');o.value=n;o.textContent=n;sel.appendChild(o);});
+}
+var _signKeypadBuilt=false;
+function flhaOpenSign(){
+  FL.signPin='';
+  if(!_signKeypadBuilt){
+    document.querySelectorAll('#signKeypad .key').forEach(function(b){
+      b.addEventListener('click',function(){
+        var k=b.dataset.sk;
+        if(k==='clear')FL.signPin='';
+        else if(k==='del')FL.signPin=FL.signPin.slice(0,-1);
+        else if(FL.signPin.length<4)FL.signPin+=k;
+        renderSignPin();
+      });
+    });
+    document.getElementById('signName').addEventListener('change',renderSignPin);
+    _signKeypadBuilt=true;
+  }
+  document.getElementById('signName').value='';
+  renderSignPin();
+  document.getElementById('signModal').classList.add('show');
+}
+function flhaCloseSign(){document.getElementById('signModal').classList.remove('show');}
+function renderSignPin(){
+  document.querySelectorAll('#signPin .pin-dot').forEach(function(d,i){d.classList.toggle('on',i<FL.signPin.length);});
+  var ready=document.getElementById('signName').value && FL.signPin.length===4;
+  document.getElementById('signBtn').disabled=!ready;
+}
+function flhaDoSign(){
+  var name=document.getElementById('signName').value;
+  if(!name||FL.signPin.length!==4)return;
+  var btn=document.getElementById('signBtn');btn.disabled=true;
+  call('apiFlhaSign',[name,FL.signPin],function(res){
+    btn.disabled=false;
+    if(!res||!res.ok){toast((res&&res.error)||'Sign-in failed',true);FL.signPin='';renderSignPin();return;}
+    FL.sigs=FL.sigs.filter(function(s){return s.name.toLowerCase()!==res.name.toLowerCase();}); // one signature per worker
+    FL.sigs.push({name:res.name,role:res.role,ts:res.ts,sig:res.sig});
+    FL.signPin='';
+    flhaCloseSign();
+    renderSigs();
+    toast(res.name+' signed ✓');
+  },function(e){btn.disabled=false;toast('Could not reach server to verify PIN',true);});
+}
+function renderSigs(){
+  var box=document.getElementById('fl_sigs');box.innerHTML='';
+  if(!FL.sigs.length){box.innerHTML='<div class="sig-empty">No sign-offs yet — each worker taps “＋ Add worker sign-off”.</div>';return;}
+  FL.sigs.forEach(function(s){
+    var t=new Date(s.ts);var hh=('0'+t.getHours()).slice(-2),mm=('0'+t.getMinutes()).slice(-2);
+    var d=document.createElement('div');d.className='sig-chip';
+    d.innerHTML='<span class="sic">✓</span><span style="flex:1"><span class="snm">'+esc(s.name)+'</span><small>signed '+hh+':'+mm+' — confirms hazards, training &amp; PPE</small></span>';
+    box.appendChild(d);
+  });
+}
+function flhaSubmit(){
+  var location=document.getElementById('fl_location').value.trim();
+  var job=document.getElementById('fl_job').value.trim();
+  var jobHaz=document.getElementById('fl_jobHaz').value.trim();
+  var hazards=Object.keys(FL.hazards);
+  var otherHaz=document.getElementById('fl_hazOther').value.trim();
+  var controls=Object.keys(FL.controls);
+  var controlsNote=document.getElementById('fl_controlsNote').value.trim();
+  var miss=[];
+  if(!location)miss.push('location');
+  if(!job)miss.push('job/task');
+  if(!hazards.length&&!otherHaz)miss.push('a hazard');
+  if(!controls.length&&!controlsNote)miss.push('a control');
+  if(jobHaz.length<4)miss.push('a site-specific note');
+  if(!FLHA_EQUIP.every(function(p){return FL.equip[p[0]];}))miss.push('the equipment check');
+  if(!FL.sigs.length)miss.push('at least one sign-off');
+  if(miss.length){toast('Please add: '+miss.join(', '),true);return;}
+  if(FL.risk==='High'&&!document.getElementById('fl_riskAck').checked){toast('High risk — tick the supervisor approval box, or lower the risk.',true);return;}
+  if(!navigator.onLine){toast('You need a connection to submit and email the FLHA. Reconnect and try again.',true);return;}
+  var btn=document.getElementById('flhaSubmitBtn');btn.disabled=true;
+  flUploadPhotos('flha','flha',function(photoLinks,failed){
+    var payload={token:S.token,device:navigator.userAgent,signatures:FL.sigs,photoLinks:photoLinks,flha:{
+      location:location,date:document.getElementById('fl_date').value,jobTask:job,place:FL.place,weather:Object.keys(FL.weather).join(' · '),
+      hazards:hazards,otherHazards:otherHaz,risk:FL.risk,riskAck:!!(document.getElementById('fl_riskAck')&&document.getElementById('fl_riskAck').checked),
+      controls:controls,controlsNote:controlsNote,jobHazards:jobHaz,
+      equip:FL.equip,ppe:Object.keys(FL.ppe),
+      emergency:{hospital:document.getElementById('fl_hospital').value.trim(),muster:document.getElementById('fl_muster').value.trim(),firstAid:document.getElementById('fl_firstaid').value.trim()}
+    }};
+    showOverlay('Submitting FLHA…');
+    call('apiFlhaSubmit',[payload],function(res){
+      btn.disabled=false;
+      if(!res||!res.ok){hideOverlay();if(/sign in/i.test((res&&res.error)||'')){toast(res.error,true);signOut();return;}toast((res&&res.error)||'Submit failed',true);return;}
+      showSuccess(res.message||'FLHA logged.');
+    },function(e){btn.disabled=false;hideOverlay();toast('No connection — FLHA not submitted. Reconnect and try again.',true);});
+  });
+}
+
+/* ================= HAZARD / ISSUE ESCALATION ========= */
+var HZ_TYPES=['Silica / dust','Equipment','Compressed air / hose','Slip / trip / fall','Public / traffic','Chemical / fumes','Electrical','Vehicle','Environmental / spill','Near-miss','Other'];
+var HZ={sev:'',type:{}};
+function openHazard(){
+  HZ={sev:'',type:{}};
+  S.photos['hazard']=[];
+  ['hz_desc','hz_location'].forEach(function(id){var e=document.getElementById(id);if(e)e.value='';});
+  document.querySelectorAll('#hz_sev .sev').forEach(function(b){b.classList.remove('on');});
+  flChips('hz_type',HZ_TYPES,HZ.type);
+  renderThumbs('hazard');
+  switchScreen('hazard');
+}
+function hzSev(btn){ HZ.sev=btn.dataset.v; document.querySelectorAll('#hz_sev .sev').forEach(function(b){b.classList.remove('on');}); btn.classList.add('on'); }
+function hazardSubmit(){
+  var desc=document.getElementById('hz_desc').value.trim();
+  if(!HZ.sev){toast('Tap how serious it is',true);return;}
+  if(desc.length<3){toast('Describe the hazard or issue',true);return;}
+  if(!navigator.onLine){toast('You need a connection to send this to management. Reconnect and try again.',true);return;}
+  var btn=document.getElementById('hzSubmitBtn');btn.disabled=true;
+  flUploadPhotos('hazard','hazard',function(photoLinks,failed){
+    var payload={token:S.token,device:navigator.userAgent,severity:HZ.sev,hazardType:Object.keys(HZ.type)[0]||'',
+      location:document.getElementById('hz_location').value.trim(),description:desc,photoLinks:photoLinks};
+    showOverlay('Sending to management…');
+    call('apiHazardReport',[payload],function(res){
+      btn.disabled=false;
+      if(!res||!res.ok){hideOverlay();if(/sign in/i.test((res&&res.error)||'')){toast(res.error,true);signOut();return;}toast((res&&res.error)||'Send failed',true);return;}
+      showSuccess(res.message||'Reported to management.');
+    },function(e){btn.disabled=false;hideOverlay();toast('No connection — not sent. Reconnect and try again.',true);});
   });
 }
 </script>

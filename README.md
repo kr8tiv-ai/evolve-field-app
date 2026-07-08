@@ -5,8 +5,18 @@
 <h1 align="center">Evolve Field App</h1>
 
 <p align="center">
-  <em>The back office of a blasting company, run on autopilot.</em><br>
-  Crew tap a button in the truck. The system files the books, prices the quotes, audits itself, and backs itself up — while they drive to the next job.
+  <em>The back office of a blasting company, run on autopilot — now with a field safety system.</em><br>
+  Crew tap a button in the truck. The system files the books, prices the quotes, runs the morning safety assessment, audits itself, and backs itself up — while they drive to the next job.
+</p>
+
+<p align="center">
+  <img alt="Platform" src="https://img.shields.io/badge/platform-Google%20Apps%20Script-4285F4">
+  <img alt="Backend" src="https://img.shields.io/badge/data-Google%20Sheets%20%2B%20Drive-0F9D58">
+  <img alt="AI" src="https://img.shields.io/badge/brain-scheduled%20Claude%20agent-8A63D2">
+  <img alt="Cost" src="https://img.shields.io/badge/run%20cost-%240%2Fmonth-39ff14">
+  <img alt="Status" src="https://img.shields.io/badge/status-live%20in%20production-brightgreen">
+  <img alt="Compliance" src="https://img.shields.io/badge/safety-Alberta%20OHS%20aligned-ff7a00">
+  <img alt="License" src="https://img.shields.io/badge/license-MIT-lightgrey">
 </p>
 
 <p align="center">
@@ -17,218 +27,182 @@
 
 ## TL;DR
 
-A mobile-first capture app for an abrasive-blasting crew who aren't technical and shouldn't have to be. They sign in with a name and a 4-digit PIN, tap one big button — **Receipt, Job Photo, Before/After, Lead, Customer, Quote, Inventory, Price, Job Actuals, "just say what it is"** — snap a photo, and hit save. That's the whole job.
+A mobile-first field app for an abrasive-blasting crew who aren't technical and shouldn't have to be. They sign in with a name and a 4-digit PIN and tap one big button:
 
-Everything they capture lands in one safe **Inbox** tab of the company's Google Sheets "Ops Workbook." Then **two brains take over**:
+- **Log something** — Receipt, Job Photo, Before/After, Lead, Customer, Quote, Inventory, Price, Job Actuals, or "just say what it is."
+- **Start FLHA** — a phone-first **Field Level Hazard Assessment** the crew completes before work starts, with a verified per-worker sign-off.
+- **Report a Hazard** — a one-screen escalation that emails management immediately.
 
-1. A **scheduled Claude agent** reads the inbox a few times a day and does the part nobody wants to do — reads the receipt, files it under Expenses; turns a field note into a Lead with a follow-up; prices a quote, generates the branded PDF, and emails it; and audits the whole workbook for things that slipped.
-2. A **server-side automation layer** running on Google's own triggers (no PC required) sends the morning digest, sweeps the money loop three times a day, turns email replies into to-dos, **mines spend for daily insights**, and **backs up the entire workbook every three days into a copy that can't be deleted by accident.**
+Everything they capture lands in one safe **Inbox** tab of the company's Google Sheets "Ops Workbook." Then **two brains take over:**
 
-It is the difference between *"we have a spreadsheet"* and *"the spreadsheet runs the business."*
+1. A **scheduled Claude agent** reads the inbox a few times a day and does the part nobody wants to do — reads the receipt and files it under Expenses; turns a field note into a Lead with a follow-up; prices a quote, generates the branded PDF, and emails it; and audits the whole workbook for things that slipped.
+2. A **server-side automation layer** running on Google's own triggers (no PC required) sends the morning digest, sweeps the money loop three times a day, turns email replies into to-dos, mines spend for daily insights, and **backs up the entire workbook every three days** into a copy that can't be deleted by accident.
+
+And now a **third pillar — safety** — logs every FLHA and hazard report to the workbook, stores a branded PDF to Drive, and emails the owners, with signatures that are cryptographically attributable and can't be back-dated.
+
+It is the difference between *"we have a spreadsheet"* and *"the spreadsheet runs the business — safely."*
 
 ---
 
 ## What this actually is
 
-Most small trades businesses die by a thousand un-logged receipts. The owner is on a ladder, not at a desk. Data entry is the tax you pay for knowing whether you made money, and nobody pays it on time.
+Most small trades businesses die by a thousand un-logged receipts and one un-documented incident. The owner is on a ladder, not at a desk. Data entry — and safety paperwork — is the tax you pay for knowing whether you made money and whether you're covered, and nobody pays it on time.
 
 This kills the tax.
 
-- **Capture is one tap and a photo.** No training. No "fields." If they're not sure where something goes, they hit **Quick Capture**, say it in plain words, and the AI figures it out.
-- **The crew can't break the books.** Every capture lands in a safe staging **Inbox**, and clean expense rows are auto-filed to Expenses server-side — but the app only ever *appends rows or sets cells*. It never edits or deletes the fragile matrix, legend, and scorecard layouts that are easy to corrupt. The heavy structured filing — quotes, dispatch, P&L — runs through the scheduled brains, not the crew's phone.
-- **The intelligence is the back-office clerk.** It routes every inbox item into the correct tab with the correct columns, builds and emails quotes, raises "you forgot to invoice this" alerts, reconciles the books, surfaces money-saving insights — then logs exactly what it did.
-- **It keeps running with the PC off.** The digests, sweeps, insight generation, and backups live on Google's time-driven triggers, so the back office runs whether or not anyone's computer is on.
+- **Capture is one tap and a photo.** No training, no "fields." Not sure where something goes? Hit **Quick Capture**, say it in plain words, and the AI figures it out.
+- **Safety is built in, not bolted on.** The morning FLHA is mostly tappable buttons; it can't be submitted without real hazards, controls, a site-specific note, the equipment check, and a signature. A hazard can be escalated to management in about ten seconds.
+- **The crew can't break the books.** Every capture lands in a safe staging **Inbox**; the app only ever *appends rows or sets cells* — it never edits the fragile matrix/legend/scorecard layouts. Heavy structured filing runs through the scheduled brains, not the crew's phone.
+- **It keeps running with the PC off.** Digests, sweeps, insight generation, backups, and the safety pipeline live on Google's time-driven triggers.
 - **It runs on what the business already pays for.** Google Workspace + a domain. No new subscriptions, no server, no per-seat SaaS.
 
-> The design goal was never "an app." It was: *the owner should be able to ignore the back office for a week and come back to a clean, current, correctly-categorized set of books — and never lose a thing.*
+> The design goal was never "an app." It was: *the owner should be able to ignore the back office for a week and come back to a clean, current, correctly-categorized set of books — a documented safety record for every shift — and never lose a thing.*
 
 ---
 
 ## How it runs the business on autopilot
 
 ```
-  FIELD CREW (phone)            SAFE STAGING            THE TWO BRAINS                    THE BOOKS
- ┌────────────────────┐      ┌──────────────┐    ┌──────────────────────────┐     ┌──────────────────┐
- │  Evolve Field App   │      │  📥 App Inbox │    │ ① Scheduled Claude agent │     │  Quotes           │
- │  name + 4-digit PIN  │ tap  │  (append-only │    │    7am · 1pm · 7pm        │ files│  Customers · Leads │
- │                      │ ───▶ │   staging)    │──▶ │    files · quotes · audit │ ───▶ │  Dispatch          │
- │  • Receipt / Expense │ photo│              │    │                          │     │  Expenses          │
- │  • Job / Before·After│      │  👥 App Users │    │ ② Apps Script autonomy   │     │  Inventory         │
- │  • Lead / Customer   │      │  🗒 App Log   │    │    (Google triggers,     │     │  Job P&L           │
- │  • Build a Quote     │      └──────┬───────┘    │     PC-off):              │     │  Action Items      │
- │  • Inventory / Price │             │            │    • morning digest      │     │  Price Watch …     │
- │  • Job Actuals       │   photos    ▼            │    • money-loop sweep ×3  │     └─────────┬────────┘
- │  • Request a feature │      ┌──────────────┐    │    • email-reply → to-do │               │
- │  • Quick Capture 🎙  │ ───▶ │ Google Drive  │    │    • 💡 insights engine  │  emails the   │
- └─────────┬───────────┘      │ receipts/photos│   │    • 🛟 3-day backups     │  branded quote │
-           │                  └──────────────┘    └───────────┬──────────────┘  + alerts ◀─────┘
-           │                                                   │
-           └───────────────── insights + digests + quotes + "you forgot to invoice X" ──────▶ OWNER'S INBOX
+  FIELD CREW (phone)            SAFE STAGING            THE THREE PILLARS                 THE BOOKS
+ ┌─────────────────────┐      ┌──────────────┐    ┌──────────────────────────┐     ┌──────────────────┐
+ │  Evolve Field App    │      │  📥 App Inbox │   │ ① Scheduled Claude agent │     │  Quotes           │
+ │  name + 4-digit PIN  │ tap  │  (append-only │   │    files · quotes · audit │ ───▶│  Customers · Leads │
+ │                      │ ───▶ │   staging)    │──▶│                          │     │  Dispatch          │
+ │  • Log something     │ photo│              │    │ ② Apps Script autonomy   │     │  Expenses          │
+ │  • 🦺 Start FLHA      │      │  👥 App Users │   │    (Google triggers,     │     │  Job P&L           │
+ │  • ⚠️ Report Hazard   │      │  🗒 App Log   │   │     PC-off)              │     │  Action Items …    │
+ └─────────┬───────────┘       └──────┬───────┘    │ ③ Safety pipeline        │     ├──────────────────┤
+           │                          │            │    FLHA + hazard escal.  │     │  🦺 FLHA           │
+           │        photos            ▼            └───────────┬──────────────┘     │  ⚠️ Hazard Reports │
+           └───────────────▶ ┌──────────────┐                 │                    └─────────┬────────┘
+                             │ Google Drive  │  branded PDFs +  │  emails digests, quotes,     │
+                             │ photos · PDFs │  insights + "you │  FLHA PDFs, hazard alerts  ◀─┘
+                             └──────────────┘  forgot to X" ───▶ OWNERS' INBOX
 ```
 
-The crew side is dumb on purpose. The intelligence lives in the scheduled layers, where it's cheap, auditable, and can be improved without ever touching the thing in the crew's hands.
+The crew side is dumb on purpose. The intelligence lives in the scheduled layers, where it's cheap, auditable, and improvable without ever touching the thing in the crew's hands.
 
 ---
 
-## The capture app
+## 🦺 The safety system (Alberta OHS–aligned)
 
-A single-screen, PWA-style web app (`Index.html`), branded to match the company site (dark "Boreal Void," Cyber-Lime accents, Neue Montreal). Built for one-handed use in a truck.
+The newest pillar. A blasting crew works with respirable silica, compressed air, and — on older substrates — lead paint. Safety documentation isn't optional, and it can't be a chore or it won't get done. So it was built to be *fast, conclusive, and legally defensible.*
 
-| Button | What a tap does |
+**Field Level Hazard Assessment (FLHA)** — completed at the job or shop before work starts:
+
+- **Mostly taps.** Location, date, job/task, field/shop; then tappable chips for **weather, 20+ pre-loaded blasting/concrete hazards** (silica and lead paint first), **controls in the hierarchy order** (eliminate → substitute → engineer → administrate → PPE), **PPE**, and a **10-point equipment check** (whip checks, o-rings, compressor, containment, deadman valves…).
+- **Risk with a hard stop.** Low / Medium / **High = STOP** until a supervisor approves.
+- **Can't be a copy-paste.** Submission is blocked without at least one hazard, one control, a **required site-specific note**, the full equipment check, and a signature — the "checkbox exercise" an OHS officer looks for is designed out.
+- **Add site photos** — containment, hazards, setup — in one tap.
+- **Verified per-worker sign-off.** Each worker signs with *their own PIN*. The server verifies it and returns an **HMAC signature stamped with a server timestamp**, so a signature is genuinely that worker's, can't be forged from the phone, and can't be back-dated. Two, three, or more sign on the crew-lead's phone. By signing, each worker attests *"I understand the hazards, I'm trained for my task, I have the proper PPE"* — the artifact that satisfies the young/new-worker training duty.
+
+**Report a Hazard** — a separate one-screen fast lane: severity (Low → Critical), hazard type, what's going on, location, optional photo → **emails both owners immediately** and logs to a Hazard Reports tab. A way to make management aware of a problem in seconds.
+
+**On submit, every FLHA:** logs one row to the `🦺 FLHA` tab (with each signer + timestamp as proof), renders a **branded, invoice-grade PDF** and stores it to Drive, and emails it to the owners — reusing the same mailer the morning digest uses.
+
+> Aligned to the **Alberta OHS Act, Regulation and Code** — Part 2 §7–10 (assess before work, involve workers, control by hierarchy), Act §3(2) (train young/new workers before hazardous work), and Part 4 §39 (abrasive-blasting silica). Records are timestamped server-side and built to be retained ≥ 5 years (10+ for silica/lead exposure).
+
+---
+
+## Feature tour
+
+| Area | What it does |
 |---|---|
-| 🎙 **Quick Capture** | Snap + say it in plain words. The AI decides where it belongs. |
-| 🧾 **Receipt / Expense** | Photo → vendor, total, date auto-read → Expenses + Drive |
-| 📸 **Job Photo** | On-site shots with GPS, tagged to the job |
-| 🪄 **Before & After** | Paired marketing shots, kept together for socials |
-| 🎯 **New Lead** | Snap a business card or the job → pipeline with a follow-up |
-| 🤝 **New Customer** | Add to the book — card photo or typed |
-| 💲 **Build a Quote** | Sq ft + scope + "use our rates" *or* "set my own price" |
-| 🗓️ **Schedule / Dispatch** | Move a job, change its status |
-| ✅ **To-Do / Task** | Drop a task with priority + due date |
-| 📦 **Inventory Count** | Stock counts by section |
-| 🛒 **Price / Purchase** | What we paid, for price-watching |
-| 🏪 **Supplier** | Add a vendor — local/online, products, pricing |
-| 📊 **Job Actuals** | Real hours and costs after a job, for true margin |
-| 📋 **Job Report** | Full end-of-job wrap-up for the Job Form |
-| 🛠 **Request / Report** | Crew ask for features or report bugs → straight to the to-do list |
-
-Niceties: a 4-digit PIN keypad, persistent login (HMAC-signed 30-day tokens), auto-downscaled photos uploaded one at a time for weak cellular, tap-to-attach GPS, an "add to home screen" coach, and a green-glow UI that doesn't look like a spreadsheet.
+| **Capture** | One-tap logging of receipts, job photos, before/after, leads, customers, quotes, inventory, price logs, job actuals, feature requests, and free-form "quick capture." Offline outbox so nothing is ever lost. |
+| **Receipt OCR** | Two free OCR engines (Google Drive native, on-device Tesseract fallback) auto-fill vendor/date/total from a photo — no paid API. A robust money parser handles `$1,234.56`, European `1.234,56`, and space-grouped totals. |
+| **The Claude agent** | Reads the inbox on a schedule, files each item to the right tab/columns, builds and emails branded quotes, raises "you forgot to invoice this" alerts, and audits the workbook. |
+| **Server-side autonomy** | Morning digest, money-loop sweeps (3×/day), email-reply → to-do capture, a daily spend-insight engine, and a 3-day workbook backup — all on Google triggers, PC or no PC. |
+| **🦺 Safety** | FLHA with verified multi-worker sign-off + branded PDF; one-tap hazard escalation to management. |
+| **Financial safety gate** | Ambiguous or unreadable receipt totals are *held out* of Expenses/P&L until a human confirms — a wrong number never silently enters the books. |
 
 ---
 
-## Brain ① — the scheduled Claude router
+## Security model
 
-A scheduled agent that follows a playbook ([`claude-router-task.md`](claude-router-task.md)) on every run:
+This is a real app with an auth system and user logins, so security is a first-class concern.
 
-- **Files everything** — exact column maps for all the workbook tabs, currency-as-text vs numbers, legends/scorecards left untouched, cross-tab keys kept consistent.
-- **Builds quotes** — prices from the rate table (sq ft × rate × access + mobilization, +GST, deposit) *or* a custom number, generates the branded PDF from the company template, emails it to the owners, and files it across Quotes + Customers + Leads.
-- **Audits the books** — raises Action Items for unpaid invoices, stale/expiring quotes, deposits-in-but-unscheduled, jobs done-but-not-invoiced, and leads with no next action.
-- **Never deletes. When unsure, it flags "NEEDS REVIEW" instead of guessing.**
-
-It writes back only through a **narrow, secret-authenticated API** (`doPost`) that can append rows, set single cells, mark inbox items, send mail, and post insights — never wipe or delete.
-
----
-
-## Brain ② — the server-side autonomy layer (`AutoServer.gs`)
-
-Everything that *must* be reliable lives on Google's time-driven triggers, so it fires whether or not any computer is on. Install it with **`EV_installCore()`** + **`EV_installGmail()`** (and `EV_setupBrain()` + `EV_installBackups()`, below):
-
-| Job | Cadence | What it does |
-|---|---|---|
-| **Morning ops digest** | daily ~7:45 AM | Weather, money loop, open follow-ups, quotes in play, inbox health → emailed to the owner |
-| **Personal daily digest** | daily ~6:00 AM | Today's to-do list, reply-to-add |
-| **Dispatch sweep + insight refresh** | 7 AM · 1 PM · 7 PM | Audits deposit→invoice→paid, overdue items, unfiled inbox; refreshes the 💡 insights; writes a heartbeat; emails only when something needs a human |
-| **Email-reply monitor** | hourly | Reads replies to the digests, turns each line into a logged to-do, and confirms by reply |
-| **🛟 System backups** | every 3 days | A full, accident-proof copy of the entire workbook |
-
-> **Note on generations:** `AutoServer.gs` (the `EV_*` functions) is the current autonomy + brain. An earlier generation (`evolve*` functions in `Code.gs`, installed by `evolveInstallTriggers`) is superseded — `EV_installCore()` clears it out. Install the `EV_*` set; don't run both, or digests double-send.
+- **No secrets in source.** Every credential — the router secret, the deployment secret, the script ID, the spreadsheet and Drive IDs — lives in Google **Script Properties**, deployment config, or the workbook itself, never in committed code. This repository ships **only placeholders** (`YOUR_SPREADSHEET_ID`, `YOUR_ROUTER_SECRET`, `manager@yourcompany.com`, …). See [`DEPLOY.md`](DEPLOY.md) to wire in your own.
+- **User logins never touch the repo.** Names and 4-digit PINs live in a `👥 App Users` tab in the private workbook — not in code. There are no real credentials anywhere in this repository.
+- **Attributable, tamper-evident sign-off.** FLHA signatures are HMAC-signed with a server-only secret and stamped with a server timestamp; they can't be forged client-side or back-dated.
+- **Least-corruptible by design.** The crew app only appends rows / sets single cells; the fragile financial layouts are only ever written by the audited, scheduled layers.
+- **Brute-force throttling** on login and sign-off, **30-day HMAC session tokens**, and a **secret-gated** server API for the automation.
 
 ---
 
-## The Business Brain — insights that get smarter
+## Data integrity & audit
 
-`EV_generateInsights()` turns raw data into a ranked, plain-English feed in an auto-created **Insights** tab. It refreshes on every dispatch sweep (7 AM · 1 PM · 7 PM) and on each field submission, and is also exposed as an app-callable endpoint (`apiInsights(token)`) for a future in-app feed:
-
-- **Spend intelligence** — this month vs last month, biggest vendor, biggest category and its share, the single largest expense, and **new-vendor detection** ("first purchase from X — check pricing vs Price Log").
-- **Operational signals** — inbox backlog, money-loop gaps, anything that needs a human.
-- **It learns what you care about.** Each insight carries an *Importance* dropdown (New / Important / Not important / Done) right in the Insights tab. Ratings flow into a **Feedback** tab (also writable via the `apiInsightFeedback` endpoint), and the engine weights future insights by what you've marked important — so the feed sharpens to *this* business over time.
-- **Seed/estimate rows are excluded** from spend math, so baseline placeholders never pollute the numbers.
-
-### Optional AI layer (receipt OCR + narrative)
-
-Gemini-powered **receipt OCR** (`EV_ocrReceipt_`) and a short **"what to watch" narrative** (`EV_geminiNarrative_`) are built in but **gated behind an empty `GEMINI_API_KEY`** — dormant and safe until you paste a key from aistudio.google.com. With a key, a photographed receipt is parsed straight to `{vendor, total, gst, date, category}`.
+The books are only worth what they're accurate to. The codebase includes a hardening layer with a unit-tested money parser, a financial gate that quarantines untrustworthy totals, receipt de-duplication keyed on a submission ID, and canonical vendor merging. The system is periodically audited end-to-end (parsing, filing paths, trigger hygiene, duplicate detection) and fixes are verified against a regression battery before deploy.
 
 ---
 
-## Every input is data — how captures become optimization
+## Tech stack
 
-Nothing captured is "just a photo" or "just a note." Each input is geotagged, timestamped, and
-cross-referenced against the rest, so small, individually-insignificant data points compound into
-patterns the brain can act on.
-
-**What gets gathered**
-- **Location** — GPS is attached to job photos, before/after shots, leads, quotes, *and receipts*. Every capture knows *where* it happened.
-- **Travel** — capture locations + job addresses (Dispatch) let the brain reason about distance, drive time, and fuel against the value of each job ("you drove 45 min for a $180 job").
-- **Quotes** — sq ft, blast depth, rate, access factor, win/loss, and realized $/sq ft feed pricing optimization and the break-even check.
-- **Receipts** — vendor, every line item, unit price, GST, payment method, and date — **full resolution, never downscaled** — tied to the job(s) running that day via Dispatch, so each job's true material + fuel cost is known.
-- **Everything else** — supplier prices over time, lead source → conversion, inventory burn, weather vs scheduling, client ratings. All of it.
-
-**How it becomes optimization.** The Business Brain (`EV_generateInsights`) plus the router's research pass cross-reference these inputs and surface ranked, plain-English suggestions daily — cheaper sourcing, pricing that's slipping, jobs whose travel eats the margin, vendors creeping up, the best day to schedule. They ride along in the morning email and the 💡 Insights feed, and the engine learns which ones matter from your Importance ratings. **The compounding is the point: the more you capture, the sharper the suggestions get over time.**
-
-**Image integrity is non-negotiable.** Receipt, invoice, and paperwork photos upload at full original resolution — never downscaled or re-encoded — because they are financial and tax records and OCR can't read a degraded image. Nothing captured is ever deleted.
-
-## 🛟 Data safety — backups that can't be deleted by accident
-
-The Ops Workbook is the irreplaceable structured database for the whole business. [`Backups.gs`](Backups.gs) protects it:
-
-- **Every 3 days** (server-side, ~3 AM, PC-off) it takes a **full, independent copy** of the entire workbook into a dedicated folder, `00 SYSTEM BACKUPS — DO NOT DELETE`, with a README inside.
-- **It never deletes.** Every snapshot is kept forever, so a stray deletion can't wipe your history — there are always older copies to restore from.
-- Copies are set private/view-only to discourage stray edits, and each is a standalone Google Sheet you can open and restore in one click.
-- Uses only the permissions the app already has (Drive + triggers + mail), so **no new authorization is needed.** One-time setup: `Run ▸ EV_installBackups` (creates the folder, installs the trigger, and takes the first backup immediately). `EV_listBackups` shows what's on file; `EV_runBackup` makes one on demand.
-
-> True retention-locking (immutability) requires Google Workspace + Vault. On a standard account this is the strongest protection available — independent full copies, never pruned, clearly marked — and it's a real safety net because every copy is independent of the live file.
+- **Runtime:** Google Apps Script (V8) — web app + time-driven triggers
+- **Data:** Google Sheets (Ops Workbook) + Google Drive (photos, receipts, quote & FLHA PDFs)
+- **Frontend:** a single self-contained `Index.html` — vanilla JS, installable to the home screen, offline-capable (IndexedDB outbox), branded to the company site
+- **Intelligence:** a scheduled Claude agent (via CLI / automation) for filing, pricing, and auditing
+- **PDF/OCR/email:** all native Apps Script (`getAs('application/pdf')`, Drive OCR, `MailApp`) — zero third-party services
 
 ---
 
-## Safety-first, by construction
+## Repository layout
 
-- The crew app (name + PIN) **appends to a staging Inbox and auto-files clean expense rows** — it only appends rows or sets cells, never deletes, and never rewrites the fragile legend/scorecard layouts.
-- The scheduled Claude router writes back through a **narrow, shared-secret API** (`doPost`) for the heavier structured filing, quoting, and audit — append/set only, never wipe.
-- Auth is **HMAC-signed, expiring tokens** with brute-force lockout. Photos are size-capped and uploaded one at a time so a weak signal in the field still succeeds.
-- Heartbeats are written on every scheduled run, so the absence of a run is detectable rather than silent.
-
----
-
-## Repo layout
-
-| File | What it is |
-|---|---|
-| [`Code.gs`](Code.gs) | Backend: web-app entry, name+PIN auth, capture → Inbox, one-photo-per-call Drive uploads, the secret-authed router `doPost` API, and the email/digest helpers |
-| [`AutoServer.gs`](AutoServer.gs) | The server-side autonomy layer: time-driven digests, sweeps, reply-monitor, the **Business Brain** (insights + spend + feedback learning), and the optional Gemini OCR/narrative |
-| [`Backups.gs`](Backups.gs) | The 3-day, accident-proof workbook backup system |
-| [`ReceiptOps.gs`](ReceiptOps.gs) | Router-health alerting + the QuickBooks-ready 📒 Receipt Log and a 3-day receipt-discrepancy report |
-| [`FeedHistory.gs`](FeedHistory.gs) | Total-recall capture feed — `apiCaptureHistory` (paginated, full per-capture detail) for the tappable "Just Captured" view |
-| [`OcrFill.gs`](OcrFill.gs) | Free receipt OCR auto-fill — `apiOcrReceipt` reads a receipt with Google Drive's **own** native OCR (no paid API/key, uses the existing Drive scope); when Drive OCR is rate-limited the app falls back to **on-device Tesseract.js** (`apiParseReceiptText` parses that text), so the button works either way. Pre-fills date/vendor/total for the rep to confirm |
-| [`Index.html`](Index.html) | The entire branded capture app (UI + logic, runs in a built-in demo mode if opened directly) |
-| [`appsscript.json`](appsscript.json) | Project manifest (OAuth scopes + web-app settings) |
-| [`claude-router-task.md`](claude-router-task.md) | The scheduled Claude agent's playbook — column maps, quoting steps, audit rules |
-| [`DEPLOY.md`](DEPLOY.md) | ~15-minute deployment guide |
-| [`WORKBOOK-SCHEMA.md`](WORKBOOK-SCHEMA.md) | The blank Ops Workbook structure — every tab + columns, no business data |
-| `app-frame/` | The custom-subdomain iframe wrapper + home-screen icon |
-
-> **All IDs, the deployment URL, the router secret, the owner email, and the seed PINs in this repo are placeholders** (`YOUR_SPREADSHEET_ID`, `YOUR_ROUTER_SECRET`, `manager@yourcompany.com`, `'0000'`, …). Drop in your own. No live credentials are committed.
+```
+Index.html            The entire field app — UI + logic (login, capture, FLHA, hazard, offline outbox)
+Code.gs               Web-app entry, auth (name+PIN → HMAC tokens), capture API, the secret-gated router API
+AutoServer.gs         Server-side autonomy: morning digest, sweeps, reply monitor, filer, business brain
+Safety.gs             FLHA + hazard escalation: verified sign-off, branded PDF, sheet + Drive + email
+Filing.gs             Deterministic inbox→tab routing and per-category filers
+Hardening.gs          Money parser, financial gate, idempotency, receipt-log upsert (unit-tested)
+Intelligence.gs       GST separation, Job P&L, cross-tab insights, price watch, data-quality sweep
+DriveIntake.gs        Hourly OCR of loose Drive receipts → inbox → filer
+ReceiptOps.gs         Receipt Log, router-health watch, discrepancy report
+Backups.gs            3-day full-workbook backups into a protected folder
+DigestV2/V3.gs        Morning-digest builders
+OcrFill.gs            Free in-app receipt OCR (Drive + Tesseract)
+appsscript.json       Manifest (scopes, web-app config)
+DEPLOY.md             10-minute deploy guide
+claude-router-task.md The scheduled-agent playbook (tab column maps, actions)
+WORKBOOK-SCHEMA.md    The workbook's tab/column structure
+```
 
 ---
 
-## The workbook
+## Deploy
 
-The app and brains read/write a single Google Sheets "Ops Workbook." Crew capture lands in app-owned tabs (**📥 App Inbox**, **👥 App Users**, **🗒 App Log**) and brain output in auto-created tabs (**Insights**, **Feedback**, **Vendors**). Filing happens into the live business tabs: **Quotes, Customers, Leads, Dispatch, Expenses, Inventory, Price Log, Price Watch, Suppliers, To-Do, Action Items, P&L, Job P&L, Quote Engine, Job Form, File Index, Start Here.** The crew app only auto-files clean expense rows (append/set, never delete); the structured filing, quoting, and audit run through the secret-authed router.
-
----
-
-## Setup
-
-Full guide in [`DEPLOY.md`](DEPLOY.md). In short:
-
-1. **Create an Apps Script project** on the account that owns the workbook; paste in `Code.gs`, `AutoServer.gs`, `Backups.gs`, `ReceiptOps.gs`, `FeedHistory.gs`, `OcrFill.gs`, the `Index` HTML file, and `appsscript.json`.
-2. **Fill in your IDs** (spreadsheet + Drive folders) and run **`setup()`** — it creates the app tabs and prints your `ROUTER_SECRET`.
-3. **Deploy as a Web App** (execute as you, access "Anyone"). Open the `/exec` URL on a phone → *Add to Home Screen.*
-4. **Turn on the autonomy + brain:** run **`EV_installCore()`** (morning digest + 3× dispatch sweep with insight refresh — it also clears any older triggers), **`EV_installGmail()`** (hourly reply-monitor + personal digest), **`EV_setupBrain()`** (Insights/Feedback/Vendors tabs), and **`EV_installBackups()`** (3-day backups). The `setup()` authorization already grants every scope (incl. `gmail.modify`), so no extra re-auth is needed.
-5. **Point the scheduled Claude agent** at the `/exec` URL + secret, following [`claude-router-task.md`](claude-router-task.md).
-6. **Change the seed PINs** in the App Users tab.
+Full walkthrough in **[`DEPLOY.md`](DEPLOY.md)** — create the Apps Script project, paste the files, fill in your own IDs, run `setup()` + `setupSafety()`, deploy as a web app, add your crew. About ten minutes.
 
 ---
 
-## Stack
+## Roadmap
 
-- **Google Apps Script** — web app + time-driven triggers — the whole backend, free.
-- **Google Sheets** as the database, **Google Drive** for photos and backups.
-- **A scheduled Claude agent** as the routing/quoting/audit brain.
-- **Deterministic Apps Script** as the always-on autonomy + insights + backup brain.
-- **Optional Gemini** for receipt OCR + narrative (dormant until a key is added).
-- **Plain HTML/CSS/JS** front end (no build step), wrapped on a custom subdomain.
-- **Cost to run: $0/month** beyond the Google Workspace + domain the business already has.
+The system is built to grow — new modules are added over time without touching the crew's phone. Planned and in-progress:
+
+- **Near-instant in-app quoting** — server-side quote build + PDF, dropping the desktop step entirely.
+- **Deeper Job P&L** — join Dispatch ↔ Quotes ↔ Receipt Log for true per-job margin and $/sq ft.
+- **Safety analytics** — FLHA/near-miss trends, leading indicators, and a monthly safety summary to the owners.
+- **Crew competency & training records** — tie each worker's tickets/training to their sign-off for a complete young-worker file.
+- **Fuzzy vendor matching** and continued receipt-parser hardening.
+- **Configurable, rebrandable OSS template** — so any small trades business can stand up the same back office.
+- **Second brain (future / backlog):** an **Obsidian-based knowledge vault** that mirrors the ops data and documentation into a linked, searchable "second brain" for the business — Maps of Content, dashboards, and AI-readable context. *Planned for a later iteration.*
 
 ---
 
-<p align="center"><sub>Built for Evolve Eco Surface Prep &amp; Restoration. Crafted by Matt-Aurora-Ventures, with Claude.</sub></p>
+## Design principles
+
+1. **The crew's tool is dumb on purpose.** Intelligence belongs in the scheduled, auditable layers.
+2. **Never lose a capture.** Offline outbox, idempotent submits, held-not-dropped bad totals.
+3. **Never corrupt the books.** Append-only from the phone; structured writes are audited.
+4. **Safety must be faster than skipping it.** If the FLHA takes longer than not doing it, it won't get done.
+5. **$0 infrastructure.** If it needs a server or a subscription, find another way.
+
+---
+
+## Built by
+
+**Matt Haynes** — [kr8tiv.io](https://kr8tiv.io) / [kr8tiv.ai](https://kr8tiv.ai). Product, architecture, and build.
+Developed with AI pair-programming (Claude). Client: Evolve Eco Blasting (Edmonton & Greater Alberta).
+
+## License
+
+MIT — see [`LICENSE`](LICENSE). Use it, learn from it, build your own back office with it.
