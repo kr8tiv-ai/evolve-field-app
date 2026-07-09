@@ -52,7 +52,8 @@ var FLHA_HEADERS = [
   'Crew Present', 'Hazards Identified', 'Overall Risk', 'Controls / Mitigations',
   'Job-Specific Hazards & Controls', 'Equipment Checklist', 'PPE On Site',
   'Emergency Info', 'Signatures (verified)', 'Sign-offs', 'Submitted By',
-  'PDF Link', 'Status', 'Device', 'Weather', 'Site Photos'
+  'PDF Link', 'Status', 'Device', 'Weather', 'Site Photos',
+  'Start Time', 'New/Young Worker', 'Notes'
 ];
 
 var HAZARD_HEADERS = [
@@ -226,17 +227,20 @@ function flhaSubmitCore_(payload, opts) {
 
     var hazardsStr = (f.hazards || []).join(' · ') + (f.otherHazards ? (' · Other: ' + f.otherHazards) : '');
     var controlsStr = (f.controls || []).join(' · ') + (f.controlsNote ? ((f.controls && f.controls.length ? ' · ' : '') + f.controlsNote) : '');
-    var eq = f.equip || {};
-    var equipStr = [
-      ['Equipment set up', eq.setup], ['Whip checks', eq.whipChecks], ['O-rings inspected', eq.oRings],
-      ['Compressor', eq.compressor], ['Containment', eq.containment], ['Deadman/safety valves', eq.deadman],
-      ['Couplings secure', eq.couplings], ['Risks mitigated', eq.mitigated]
+    // Equipment/pre-work checklist: the client sends a pre-built "Label: value · …" string
+    // (grouped checklist). Fall back to the legacy object form (self-test / old clients).
+    var eq = f.equip;
+    var equipStr = (typeof eq === 'string') ? eq : [
+      ['Equipment set up', eq && eq.setup], ['Whip checks', eq && eq.whipChecks], ['O-rings inspected', eq && eq.oRings],
+      ['Compressor', eq && eq.compressor], ['Containment', eq && eq.containment], ['Deadman/safety valves', eq && eq.deadman],
+      ['Couplings secure', eq && eq.couplings], ['Risks mitigated', eq && eq.mitigated]
     ].map(function (p) { return p[0] + ': ' + (p[1] || '—'); }).join(' · ');
     var em = f.emergency || {};
     var emergencyStr = [
       em.hospital ? ('Hospital: ' + em.hospital) : '',
       em.muster ? ('Muster: ' + em.muster) : '',
       em.firstAid ? ('First aid: ' + em.firstAid) : '',
+      em.contact ? ('Contact: ' + em.contact) : '',
       em.notes ? em.notes : ''
     ].filter(String).join(' · ');
 
@@ -248,11 +252,11 @@ function flhaSubmitCore_(payload, opts) {
     });
 
     var record = {
-      id: subId, dateStr: dateStr, location: f.location, jobTask: f.jobTask, place: f.place || '',
+      id: subId, dateStr: dateStr, startTime: f.startTime || '', location: f.location, jobTask: f.jobTask, place: f.place || '',
       weather: f.weather || '', hazardsStr: hazardsStr, risk: f.risk || '', controlsStr: controlsStr,
       jobHazards: f.jobHazards || '', equipStr: equipStr, ppeStr: (f.ppe || []).join(' · '),
-      emergencyStr: emergencyStr, sigLines: sigLines, crewNames: crewNames, photoLinks: photoLinks,
-      submitter: submitter.name, changeNote: f.changeNote || ''
+      emergencyStr: emergencyStr, youngWorker: f.youngWorker || '', sigLines: sigLines, crewNames: crewNames, photoLinks: photoLinks,
+      submitter: submitter.name, notes: f.notes || '', changeNote: f.changeNote || f.notes || ''
     };
 
     // ---- (b) PDF → Drive ----
@@ -274,7 +278,7 @@ function flhaSubmitCore_(payload, opts) {
       crewNames, hazardsStr, f.risk || '', controlsStr, f.jobHazards || '',
       equipStr, (f.ppe || []).join(' · '), emergencyStr, sigLines.join('\n'),
       verified.length, submitter.name, pdfUrl, STATUS, (payload && payload.device) || '',
-      f.weather || '', photoLinks.join('\n')
+      f.weather || '', photoLinks.join('\n'), f.startTime || '', f.youngWorker || '', f.notes || ''
     ]);
 
     // ---- (c) ONE branded email to matt@ + todd@ via the shared mailer, PDF attached ----
@@ -392,18 +396,18 @@ function flhaPdfHtml_(r) {
     '</div>' +
     // meta grid
     '<table style="width:100%;border-collapse:collapse">' +
-      '<tr>' + flhaMetaCell_('Date', r.dateStr) + flhaMetaCell_('Field / Shop', r.place) + flhaMetaCell_('Weather', r.weather) + '</tr>' +
+      '<tr>' + flhaMetaCell_('Date', r.dateStr) + flhaMetaCell_('Start time', r.startTime) + flhaMetaCell_('Field / Shop', r.place) + '</tr>' +
+      '<tr>' + flhaMetaCell_('Weather', r.weather) + flhaMetaCell_('New / young worker', r.youngWorker) + flhaMetaCell_('Crew present', r.crewNames) + '</tr>' +
       '<tr>' + flhaMetaCell_('Location', r.location) + '<td colspan="2" style="padding:9px 12px;border:1px solid ' + FLHA_B.line + '"><div style="font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:' + FLHA_B.aurora + '">Job / Task</div><div style="font-size:14px;color:' + FLHA_B.silver + ';margin-top:2px">' + (r.jobTask ? flhaEsc_(r.jobTask) : '—') + '</div></td></tr>' +
-      '<tr>' + '<td colspan="3" style="padding:9px 12px;border:1px solid ' + FLHA_B.line + '"><div style="font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:' + FLHA_B.aurora + '">Crew present</div><div style="font-size:14px;color:' + FLHA_B.silver + ';margin-top:2px">' + (r.crewNames ? flhaEsc_(r.crewNames) : '—') + '</div></td></tr>' +
     '</table>' +
     flhaSection_('Hazards identified', flhaChips_(r.hazardsStr)) +
     flhaSection_('Controls / mitigations  (eliminate -> substitute -> engineer -> admin -> PPE)', flhaChips_(r.controlsStr)) +
     flhaSection_('Job-specific hazards & what we did', '<div style="white-space:pre-wrap;border-left:2px solid ' + FLHA_B.aurora + ';padding-left:12px">' + flhaEsc_(r.jobHazards || '—') + '</div>') +
-    flhaSection_('Setup / equipment check', flhaEquipGrid_(r.equipStr)) +
+    flhaSection_('Pre-work checklist (equipment · pressure · site · containment)', flhaEquipGrid_(r.equipStr)) +
     flhaSection_('PPE on site', flhaChips_(r.ppeStr)) +
     (r.emergencyStr ? flhaSection_('Emergency / site info', flhaEsc_(r.emergencyStr)) : '') +
     (photos ? flhaSection_('Site photos', photos) : '') +
-    (r.changeNote ? flhaSection_('Conditions changed during shift', '<div style="white-space:pre-wrap">' + flhaEsc_(r.changeNote) + '</div>') : '') +
+    (r.notes ? flhaSection_('Notes', '<div style="white-space:pre-wrap">' + flhaEsc_(r.notes) + '</div>') : '') +
     flhaSection_('Worker sign-off (verified)', '<div style="color:' + FLHA_B.dim + ';font-size:12px;margin-bottom:8px">Each worker signed with their own PIN — confirming they understand the hazards, are trained for their task, and have the proper PPE. Signatures are server-timestamped and cannot be back-dated.</div>' + sigCards) +
     '<div style="margin-top:24px;padding-top:12px;border-top:1px solid ' + FLHA_B.line + ';color:' + FLHA_B.dim + ';font-size:10.5px;line-height:1.6">' +
       'Submitted by ' + flhaEsc_(r.submitter) + ' &middot; Generated ' + flhaEsc_(flhaNowStamp_()) + '<br>Retain &ge; 5 years (silica / lead exposure records 10+ years). WWW.EVOLVEECOBLASTING.COM &middot; Serving Edmonton &amp; Greater Alberta' +
@@ -454,15 +458,17 @@ function EV_flhaSelfTest_() {
     signatures: [{ name: who, role: 'admin', ts: ts, sig: sign_(who + '|' + ts + '|flha') }],
     flha: {
       location: 'SELF-TEST — shop', date: Utilities.formatDate(new Date(), SAFETY.TZ, 'yyyy-MM-dd'),
-      jobTask: 'FLHA pipeline self-test', place: 'Shop',
-      hazards: ['Silica / respirable dust', 'Noise', 'Compressed air / hose whip'],
+      startTime: Utilities.formatDate(new Date(), SAFETY.TZ, 'HH:mm'),
+      jobTask: 'FLHA pipeline self-test', place: 'Shop', weather: 'Clear',
+      hazards: ['Respirable dust (silica-free media)', 'Noise', 'Compressed air / hose whip'],
       otherHazards: '', risk: 'Low', riskAck: false,
-      controls: ['Wet / dustless method', 'Whip checks + deadman', 'Supplied-air blast hood'],
+      controls: ['Silica-free media', 'Whip checks + deadman', 'Supplied-air blast hood'],
       controlsNote: 'Automated self-test — verifies sheet + Drive + email wiring.',
       jobHazards: 'Self-test record — confirms the FLHA logs, stores a PDF and emails correctly.',
-      equip: { setup: 'Yes', whipChecks: 'Yes', oRings: 'Yes', compressor: 'Yes', containment: 'Yes', deadman: 'Yes', couplings: 'Yes', mitigated: 'Yes' },
+      equip: 'Whip checks on EVERY hose connection: Yes · O-rings checked / inspected: Yes · Compressor: air filters blown out: Yes · Blast radius secured: Yes · Abrasive media adequately contained: Yes · Water on site (hydration): Yes · SDS available (media & coatings): N/A',
       ppe: ['Blast hood / supplied air', 'Hearing protection', 'Eye / face'],
-      emergency: { hospital: 'n/a (test)', muster: 'n/a', firstAid: 'n/a' }
+      youngWorker: 'No', notes: 'Self-test note.',
+      emergency: { hospital: 'n/a (test)', muster: 'n/a', firstAid: 'n/a', contact: '911' }
     }
   };
   return flhaSubmitCore_(payload, { emailTo: ['manager@yourcompany.com'], status: 'SELF-TEST' });

@@ -283,6 +283,18 @@ footer{text-align:center;padding:30px 0 10px;color:var(--faint);font-size:.66rem
 .sev.on.med{background:rgba(224,160,0,.2);border-color:#e0a000;color:#ffcc54}
 .sev.on.high{background:rgba(255,77,77,.2);border-color:#ff4d4d;color:#ff7a7a}
 .sev.on.crit{background:rgba(255,45,45,.28);border-color:#ff2d2d;color:#ff9a9a;box-shadow:0 0 16px rgba(255,45,45,.4)}
+/* FLHA grouped checklist + three-state toggles */
+.chk-head{display:flex;align-items:center;gap:10px;margin:22px 2px 6px}
+.chk-head .ci{font-size:1.05rem}
+.chk-head .ct{flex:1;font-size:.72rem;letter-spacing:.16em;text-transform:uppercase;color:var(--lime);font-weight:600}
+.chk-allbtn{background:var(--lime-dim);border:1px solid rgba(0,255,65,.35);color:var(--lime);border-radius:999px;
+  padding:6px 12px;font-family:var(--font);font-size:.66rem;text-transform:uppercase;letter-spacing:.08em;cursor:pointer;white-space:nowrap}
+.chk-allbtn.na{background:rgba(255,255,255,.05);border-color:var(--border-bright);color:var(--dim)}
+.eqrow .toggle{flex:0 0 190px}
+.eqrow .toggle button{padding:9px 4px;font-size:.76rem}
+.eqrow .toggle button.st-no.on{background:rgba(255,77,77,.2);border-color:#ff4d4d;color:#ff7a7a}
+.eqrow .toggle button.st-na.on{background:rgba(255,255,255,.08);border-color:var(--border-bright);color:var(--dim)}
+.chk-progress{font-size:.72rem;color:var(--faint);margin:4px 2px 0}
 </style>
 </head>
 <body>
@@ -394,17 +406,19 @@ footer{text-align:center;padding:30px 0 10px;color:var(--faint);font-size:.66rem
       <div class="field"><label class="fld">Location / site address <span class="req">*</span></label><input id="fl_location" placeholder="e.g. 10824 67 Ave, Edmonton"></div>
       <div class="row2 field">
         <div><label class="fld">Date</label><input id="fl_date" type="date"></div>
-        <div><label class="fld">Field or Shop</label><div class="toggle" id="fl_place">
-          <button type="button" data-v="Field" onclick="flPlace(this)">Field</button>
-          <button type="button" data-v="Shop" onclick="flPlace(this)">Shop</button>
-        </div></div>
+        <div><label class="fld">Start time</label><input id="fl_time" type="time"></div>
       </div>
+      <div class="field"><label class="fld">Field or Shop</label><div class="toggle" id="fl_place">
+        <button type="button" data-v="Field" onclick="flPlace(this)">Field</button>
+        <button type="button" data-v="Shop" onclick="flPlace(this)">Shop</button>
+      </div></div>
       <div class="field"><label class="fld">Job / task <span class="req">*</span></label><input id="fl_job" placeholder="e.g. dustless blast + profile aggregate driveway"></div>
 
       <div class="sec-label"><span class="bar"></span><span>Weather / conditions — tap all that apply</span></div>
       <div class="chips" id="fl_weather"></div>
 
       <div class="sec-label"><span class="bar"></span><span>Hazards present today — tap all that apply</span></div>
+      <div class="infobox"><span class="ii">ⓘ</span><span>Evolve runs <b>silica-free abrasive media</b> — but blasting still creates <b>respirable dust</b>; wear your respirator and control the dust.</span></div>
       <div class="chips" id="fl_hazards"></div>
       <div class="field"><label class="fld">Other hazards on site</label><input id="fl_hazOther" placeholder="anything not listed above"></div>
 
@@ -428,11 +442,19 @@ footer{text-align:center;padding:30px 0 10px;color:var(--faint);font-size:.66rem
         <div class="hint">Required — this is what proves the FLHA is real for today's site, not a copy-paste.</div>
       </div>
 
-      <div class="sec-label"><span class="bar"></span><span>Setup / equipment check</span></div>
-      <div id="fl_equip"></div>
+      <div class="sec-label"><span class="bar"></span><span>Pre-work checklist — Yes / No / N/A</span></div>
+      <div class="hint" style="margin:0 2px 4px">Use “All Yes” per section, then flip anything that isn’t. Answer every item before work starts.</div>
+      <div id="fl_checks"></div>
 
       <div class="sec-label"><span class="bar"></span><span>PPE on site — tap all worn</span></div>
       <div class="chips" id="fl_ppe"></div>
+
+      <div class="sec-label"><span class="bar"></span><span>New / young worker on crew today?</span></div>
+      <div class="toggle" id="fl_young" style="max-width:260px">
+        <button type="button" data-v="No" onclick="flYoung(this)">No</button>
+        <button type="button" data-v="Yes" onclick="flYoung(this)">Yes</button>
+      </div>
+      <div class="field" id="fl_supervisedByRow" style="display:none"><label class="fld">Working under direct supervision of</label><input id="fl_supervisedBy" placeholder="competent worker's name"></div>
 
       <div class="sec-label"><span class="bar"></span><span>Site photos (optional)</span></div>
       <div class="photo-zone" onclick="document.getElementById('fl_photoInput').click()">
@@ -441,12 +463,17 @@ footer{text-align:center;padding:30px 0 10px;color:var(--faint);font-size:.66rem
       <input id="fl_photoInput" type="file" accept="image/*" multiple style="display:none" onchange="handlePhotos(this.files,'flha')">
       <div class="thumbs" id="thumbs_flha"></div>
 
-      <div class="sec-label"><span class="bar"></span><span>Emergency info (optional)</span></div>
+      <div class="sec-label"><span class="bar"></span><span>Emergency info</span></div>
       <div class="row2 field">
         <div><label class="fld">Nearest hospital</label><input id="fl_hospital" placeholder="e.g. Grey Nuns"></div>
         <div><label class="fld">Muster point</label><input id="fl_muster" placeholder="e.g. front of truck"></div>
       </div>
-      <div class="field"><label class="fld">First aider on site</label><input id="fl_firstaid" placeholder="who / kit location"></div>
+      <div class="row2 field">
+        <div><label class="fld">First aider on site</label><input id="fl_firstaid" placeholder="who / kit location"></div>
+        <div><label class="fld">Emergency contact #</label><input id="fl_emContact" type="tel" placeholder="911 / supervisor"></div>
+      </div>
+
+      <div class="field"><label class="fld">Notes / anything else</label><textarea id="fl_notes" placeholder="Anything a “No” above needs explained, changes expected during the shift, or other notes."></textarea></div>
 
       <div class="sec-label"><span class="bar"></span><span>Worker sign-off <span class="req">*</span></span></div>
       <div class="infobox"><span class="ii">✍</span><span>Each worker on the job today signs with their <b>own PIN</b>. By signing you confirm: you understand the hazards, you're properly trained for your task, and you have the proper PPE.</span></div>
@@ -1373,31 +1400,73 @@ function addUser(){
 }
 
 /* ================= FLHA / SAFETY ========= */
-var FLHA_HAZARDS=['Silica / respirable dust','Lead / hazardous coatings','Noise','Compressed air / hose whip','Flying debris / eye injury','Media / abrasive handling','Slips / trips / falls','Public / traffic nearby','Overspray / containment','Lockout / stored energy','Manual handling / lifting','Working at heights','Power / electrical','Fumes / solvents','Confined space','Overhead / underground lines','Sharp edges / metal','Heat stress','Cold / ice','Sun / UV exposure','Working alone','Poor housekeeping','Wildlife / animals','WHMIS / SDS on site'];
-var FLHA_CONTROLS=['Wet / dustless method','Low-silica media','Containment / shrouds','Water suppression','Whip checks + deadman','Exclusion zone / barriers','Signage posted','Spotter / flagger','SDS reviewed','Lockout / tag-out','Ventilation','Housekeeping / clear paths','Supplied-air blast hood','Hearing protection','Eye / face protection','Gloves','Coveralls','Bystanders cleared','Rest / hydration breaks','Fall protection'];
+var FLHA_HAZARDS=['Respirable dust (silica-free media)','Lead / hazardous coatings','Noise','Compressed air / hose whip','Stored energy / pressure surge','Flying debris / eye injury','Media / abrasive handling','Slips / trips / falls','Public / pedestrians nearby','Traffic / vehicles','Overspray / containment','Overhead / underground lines','Lockout / stored energy','Fumes / solvents','Confined space','Sharp edges / metal','Heat stress / dehydration','Cold / ice','Sun / UV exposure','Working at heights','Working alone','Poor housekeeping','Fuel / fire (compressor·generator)','WHMIS / SDS on site'];
+var FLHA_CONTROLS=['Silica-free media','Containment / shrouds','Tarps / masking','Whip checks + deadman','Exclusion zone / barriers','Delineation (pylons·signage)','Spotter / flagger','Spray area watched','SDS reviewed','Lockout / tag-out','Ventilation','Housekeeping / clear paths','Supplied-air blast hood','Hearing protection','Eye / face protection','Gloves','Coveralls','Bystanders cleared','Hydration / rest breaks','Fall protection','Spill kit ready'];
 var FLHA_PPE=['Blast hood / supplied air','Respirator','Hearing protection','Eye / face','Gloves','Coveralls','Steel-toe boots','Hi-vis','Hard hat','Fall harness'];
 var FLHA_WEATHER=['Clear','Cloudy','Rain','Snow','Windy','Hot','Cold','Icy'];
-var FLHA_EQUIP=[['setup','Equipment set up properly'],['whipChecks','Whip checks installed'],['oRings','O-rings inspected'],['compressor','Compressor inspected'],['containment','Adequate containment'],['deadman','Deadman / safety valves work'],['couplings','Hoses / couplings secure'],['firstAid','First-aid kit on site'],['extinguisher','Fire extinguisher on site'],['mitigated','All risks mitigated']];
-var FL={place:'',risk:'',hazards:{},controls:{},ppe:{},weather:{},equip:{},sigs:[],signPin:''};
+// Grouped pre-work checklist (Yes / No / N/A). Covers equipment & pressure safety,
+// site & containment, and crew readiness. Each item is answered before work starts.
+var FLHA_CHECKS=[
+  {group:'Equipment & pressure',icon:'🛠',items:[
+    'Equipment set up properly',
+    'Whip checks on EVERY hose connection',
+    'O-rings checked / inspected',
+    'Hoses routed so a breakaway or pressure surge can’t whip into anyone',
+    'Compressor: air filters blown out',
+    'Compressor: oil checked',
+    'Compressor: fuel / gas checked',
+    'Generator: fuel topped up + inspected',
+    'All lines checked for leaks (no valves leaking)',
+    'Deadman / safety valves working',
+    'Hoses / couplings secure'
+  ]},
+  {group:'Site & containment',icon:'🚧',items:[
+    'Blast radius secured',
+    'Delineation set up (markers, pylons, signage)',
+    'Tarps laid out',
+    'Work area taped / masked for blasting',
+    'Obstructions cleared / nothing in the way',
+    'Abrasive media adequately contained',
+    'Spray area monitored during blasting',
+    'Overhead hazards / power lines checked',
+    'Public / pedestrians controlled',
+    'Wind acceptable for blasting + containment',
+    'Spill kit / cleanup plan ready'
+  ]},
+  {group:'Crew readiness',icon:'🧑‍🏭',items:[
+    'Water on site (hydration)',
+    'First-aid kit on site',
+    'Fire extinguisher on site',
+    'SDS available (media & coatings)',
+    'All risks reviewed & mitigated'
+  ]}
+];
+var FL={place:'',risk:'',hazards:{},controls:{},ppe:{},weather:{},checks:{},youngWorker:'',sigs:[],signPin:''};
 
 function openFlha(){
-  FL={place:'',risk:'',hazards:{},controls:{},ppe:{},weather:{},equip:{},sigs:[],signPin:''};
+  FL={place:'',risk:'',hazards:{},controls:{},ppe:{},weather:{},checks:{},youngWorker:'',sigs:[],signPin:''};
   S.photos['flha']=[];
-  ['fl_location','fl_job','fl_hazOther','fl_controlsNote','fl_jobHaz','fl_hospital','fl_muster','fl_firstaid'].forEach(function(id){var e=document.getElementById(id);if(e)e.value='';});
+  ['fl_location','fl_job','fl_hazOther','fl_controlsNote','fl_jobHaz','fl_hospital','fl_muster','fl_firstaid','fl_emContact','fl_supervisedBy','fl_notes','fl_time'].forEach(function(id){var e=document.getElementById(id);if(e)e.value='';});
   var ack=document.getElementById('fl_riskAck'); if(ack)ack.checked=false;
   document.getElementById('fl_riskWarn').style.display='none';
   var d=new Date(); document.getElementById('fl_date').value=d.getFullYear()+'-'+('0'+(d.getMonth()+1)).slice(-2)+'-'+('0'+d.getDate()).slice(-2);
+  var tf=document.getElementById('fl_time'); if(tf)tf.value=('0'+d.getHours()).slice(-2)+':'+('0'+d.getMinutes()).slice(-2);
   document.querySelectorAll('#fl_place button').forEach(function(b){b.classList.remove('on');});
   document.querySelectorAll('#fl_risk .risk').forEach(function(b){b.classList.remove('on');});
+  document.querySelectorAll('#fl_young button').forEach(function(b){b.classList.remove('on');});
+  var sb=document.getElementById('fl_supervisedByRow'); if(sb)sb.style.display='none';
   flChips('fl_hazards',FLHA_HAZARDS,FL.hazards);
   flChips('fl_controls',FLHA_CONTROLS,FL.controls);
   flChips('fl_ppe',FLHA_PPE,FL.ppe);
   flChips('fl_weather',FLHA_WEATHER,FL.weather);
-  flEquip();
+  flChecks();
   renderThumbs('flha');
   flPopulateSignNames();
   renderSigs();
   switchScreen('flha');
+}
+function flYoung(btn){ FL.youngWorker=btn.dataset.v; document.querySelectorAll('#fl_young button').forEach(function(b){b.classList.remove('on');}); btn.classList.add('on');
+  var row=document.getElementById('fl_supervisedByRow'); if(row)row.style.display=(FL.youngWorker==='Yes')?'block':'none';
 }
 /* generic photo uploader for FLHA / hazard screens (reuses apiUploadPhoto) */
 function flUploadPhotos(key,cat,cb){
@@ -1420,21 +1489,37 @@ function flChips(containerId,list,store){
     box.appendChild(c);
   });
 }
-function flEquip(){
-  var box=document.getElementById('fl_equip');box.innerHTML='';
-  FLHA_EQUIP.forEach(function(pair){
-    var key=pair[0],label=pair[1];
-    var row=document.createElement('div');row.className='eqrow';
-    var l=document.createElement('div');l.className='eql';l.textContent=label;
-    var tg=document.createElement('div');tg.className='toggle';
-    ['Yes','N/A'].forEach(function(v){
-      var b=document.createElement('button');b.type='button';b.textContent=v;
-      b.onclick=function(){ FL.equip[key]=v; tg.querySelectorAll('button').forEach(function(x){x.classList.remove('on');}); b.classList.add('on'); };
-      tg.appendChild(b);
+/* Grouped pre-work checklist — Yes / No / N/A, with per-group quick-set + a live progress count. */
+function flChecks(){
+  var box=document.getElementById('fl_checks');box.innerHTML='';
+  FLHA_CHECKS.forEach(function(grp){
+    var head=document.createElement('div');head.className='chk-head';
+    head.innerHTML='<span class="ci">'+grp.icon+'</span><span class="ct">'+esc(grp.group)+'</span>';
+    var allY=document.createElement('button');allY.type='button';allY.className='chk-allbtn';allY.textContent='All Yes';
+    allY.onclick=function(){grp.items.forEach(function(lbl){FL.checks[lbl]='Yes';});flChecks();};
+    var allN=document.createElement('button');allN.type='button';allN.className='chk-allbtn na';allN.textContent='All N/A';
+    allN.onclick=function(){grp.items.forEach(function(lbl){FL.checks[lbl]='N/A';});flChecks();};
+    head.appendChild(allY);head.appendChild(allN);
+    box.appendChild(head);
+    grp.items.forEach(function(lbl){
+      var row=document.createElement('div');row.className='eqrow';
+      var l=document.createElement('div');l.className='eql';l.textContent=lbl;
+      var tg=document.createElement('div');tg.className='toggle';
+      [['Yes','st-yes'],['No','st-no'],['N/A','st-na']].forEach(function(o){
+        var b=document.createElement('button');b.type='button';b.textContent=o[0];b.className=o[1];
+        if(FL.checks[lbl]===o[0])b.classList.add('on');
+        b.onclick=function(){ FL.checks[lbl]=o[0]; tg.querySelectorAll('button').forEach(function(x){x.classList.remove('on');}); b.classList.add('on'); flChecksProgress(); };
+        tg.appendChild(b);
+      });
+      row.appendChild(l);row.appendChild(tg);box.appendChild(row);
     });
-    row.appendChild(l);row.appendChild(tg);box.appendChild(row);
   });
+  var prog=document.createElement('div');prog.className='chk-progress';prog.id='fl_chkProgress';box.appendChild(prog);
+  flChecksProgress();
 }
+function flChecksAll(){ var n=0; FLHA_CHECKS.forEach(function(g){n+=g.items.length;}); return n; }
+function flChecksDone(){ var n=0; FLHA_CHECKS.forEach(function(g){g.items.forEach(function(l){if(FL.checks[l])n++;});}); return n; }
+function flChecksProgress(){ var el=document.getElementById('fl_chkProgress'); if(!el)return; var d=flChecksDone(),t=flChecksAll(); var no=0; FLHA_CHECKS.forEach(function(g){g.items.forEach(function(l){if(FL.checks[l]==='No')no++;});}); el.innerHTML=d+' / '+t+' answered'+(no?(' · <span style="color:#ff7a7a">'+no+' marked NO — note them below</span>'):''); }
 function flPlace(btn){ FL.place=btn.dataset.v; document.querySelectorAll('#fl_place button').forEach(function(b){b.classList.remove('on');}); btn.classList.add('on'); }
 function flRisk(btn){ FL.risk=btn.dataset.v; document.querySelectorAll('#fl_risk .risk').forEach(function(b){b.classList.remove('on');}); btn.classList.add('on');
   document.getElementById('fl_riskWarn').style.display=(FL.risk==='High')?'block':'none';
@@ -1512,19 +1597,22 @@ function flhaSubmit(){
   if(!hazards.length&&!otherHaz)miss.push('a hazard');
   if(!controls.length&&!controlsNote)miss.push('a control');
   if(jobHaz.length<4)miss.push('a site-specific note');
-  if(!FLHA_EQUIP.every(function(p){return FL.equip[p[0]];}))miss.push('the equipment check');
+  if(flChecksDone()<flChecksAll())miss.push('the pre-work checklist ('+flChecksDone()+'/'+flChecksAll()+')');
   if(!FL.sigs.length)miss.push('at least one sign-off');
   if(miss.length){toast('Please add: '+miss.join(', '),true);return;}
   if(FL.risk==='High'&&!document.getElementById('fl_riskAck').checked){toast('High risk — tick the supervisor approval box, or lower the risk.',true);return;}
   if(!navigator.onLine){toast('You need a connection to submit and email the FLHA. Reconnect and try again.',true);return;}
+  // build the checklist string the server stores + renders (Label: value · …)
+  var checkStr=[];FLHA_CHECKS.forEach(function(g){g.items.forEach(function(l){checkStr.push(l+': '+(FL.checks[l]||'—'));});});
+  var young=FL.youngWorker==='Yes'?('Yes — supervised by '+(document.getElementById('fl_supervisedBy').value.trim()||'(not named)')):(FL.youngWorker||'No');
   var btn=document.getElementById('flhaSubmitBtn');btn.disabled=true;
   flUploadPhotos('flha','flha',function(photoLinks,failed){
     var payload={token:S.token,device:navigator.userAgent,signatures:FL.sigs,photoLinks:photoLinks,flha:{
-      location:location,date:document.getElementById('fl_date').value,jobTask:job,place:FL.place,weather:Object.keys(FL.weather).join(' · '),
+      location:location,date:document.getElementById('fl_date').value,startTime:document.getElementById('fl_time').value,jobTask:job,place:FL.place,weather:Object.keys(FL.weather).join(' · '),
       hazards:hazards,otherHazards:otherHaz,risk:FL.risk,riskAck:!!(document.getElementById('fl_riskAck')&&document.getElementById('fl_riskAck').checked),
       controls:controls,controlsNote:controlsNote,jobHazards:jobHaz,
-      equip:FL.equip,ppe:Object.keys(FL.ppe),
-      emergency:{hospital:document.getElementById('fl_hospital').value.trim(),muster:document.getElementById('fl_muster').value.trim(),firstAid:document.getElementById('fl_firstaid').value.trim()}
+      equip:checkStr.join(' · '),ppe:Object.keys(FL.ppe),youngWorker:young,notes:document.getElementById('fl_notes').value.trim(),
+      emergency:{hospital:document.getElementById('fl_hospital').value.trim(),muster:document.getElementById('fl_muster').value.trim(),firstAid:document.getElementById('fl_firstaid').value.trim(),contact:document.getElementById('fl_emContact').value.trim()}
     }};
     showOverlay('Submitting FLHA…');
     call('apiFlhaSubmit',[payload],function(res){

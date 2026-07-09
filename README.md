@@ -90,7 +90,9 @@ The newest pillar. A blasting crew works with respirable silica, compressed air,
 
 **Field Level Hazard Assessment (FLHA)** — completed at the job or shop before work starts:
 
-- **Mostly taps.** Location, date, job/task, field/shop; then tappable chips for **weather, 20+ pre-loaded blasting/concrete hazards** (silica and lead paint first), **controls in the hierarchy order** (eliminate → substitute → engineer → administrate → PPE), **PPE**, and a **10-point equipment check** (whip checks, o-rings, compressor, containment, deadman valves…).
+- **Mostly taps.** Location, date, start time, field/shop; then tappable chips for **weather, 20+ pre-loaded blasting hazards** (respirable dust — the media is silica-free — and lead paint first), **controls in the hierarchy order** (eliminate → substitute → engineer → administrate → PPE), and **PPE**.
+- **A thorough pre-work checklist** — a **27-point Yes / No / N/A** checklist across *Equipment & pressure* (whip checks on **every** connection, o-rings, hose routing so a breakaway can't whip anyone, compressor filters/oil/fuel, generator, line-leak checks, deadman valves, couplings), *Site & containment* (blast radius secured, delineation/pylons/signage, tarps, masking, media contained, spray area watched, overhead lines, public control, wind, spill kit), and *Crew readiness* (water/hydration, first aid, extinguisher, SDS). One-tap "All Yes" per section, flip anything that isn't; a live counter and any "No" is flagged.
+- **Young/new-worker block** — flags a young or new worker on the crew and records the competent worker supervising them (Alberta Act §3(2)).
 - **Risk with a hard stop.** Low / Medium / **High = STOP** until a supervisor approves.
 - **Can't be a copy-paste.** Submission is blocked without at least one hazard, one control, a **required site-specific note**, the full equipment check, and a signature — the "checkbox exercise" an OHS officer looks for is designed out.
 - **Add site photos** — containment, hazards, setup — in one tap.
