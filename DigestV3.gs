@@ -1,9 +1,7 @@
-/** ===== EVOLVE MORNING DIGEST V3 (dark theme, weather + joke + focus notes) =====
- *  STATUS (corrected 2026-07-08): this is an ALTERNATE/experimental builder. EV_morningDigest()
- *  is NOT wired to it — the 6 AM send uses the canonical v2 EV_buildMorningDigestHtml_() (see
- *  AutoServer.js:330, "the one Matt prefers"). V3 is only reachable via the maint 'renderV3direct'
- *  probe. Kept (nothing deleted) in case the owner wants to switch themes later; if so, repoint
- *  EV_morningDigest to EV_buildDigestV3_() and update the test/preview helpers to match. */
+/** ===== EVOLVE MORNING DIGEST V3 (robust, deduped, weather + joke + focus notes) =====
+ *  EV_morningDigest() is repointed to call EV_buildDigestV3_().
+ *  EVERYTHING is wrapped in try/catch: if the new builder ever throws, it falls back
+ *  to the original EV_buildMorningDigestHtml_() so the 6 AM email ALWAYS goes out. */
 
 var EV_DIGEST_DEFAULT_NOTES_ = [
   "Matt + Todd: meeting on the drive out to Warburg - go over the 3 new Warburg jobs and plan the day.",

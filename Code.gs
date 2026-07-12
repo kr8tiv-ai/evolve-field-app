@@ -522,6 +522,7 @@ function doPost(e) {
       case 'insight':    return jsonOut_(upsertInsight_(body));  // F-3: {type,title,detail,score} upsert w/ fingerprint dedupe
       case 'log':        return jsonOut_(appLog_('Claude', body.message));
       case 'maint':      return jsonOut_(EV_maintAction_(body));   // {fn} whitelisted maintenance: setDigest6am | testDigestMatt | listTriggers | runDigest
+      case 'ops':        return jsonOut_((typeof EV_opsAction_ === 'function') ? EV_opsAction_(body) : { ok: false, error: 'ops module missing' });  // Overnight.js: ocrSelfTest | receiptContext | fileReceipt | quoteLearning | systemHealth | appendSystemLog
       default:           return jsonOut_({ ok: false, error: 'Unknown action: ' + body.action });
     }
   } catch (err) {

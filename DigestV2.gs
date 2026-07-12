@@ -31,23 +31,39 @@ function EV_amt_(v) {
 
 /* ---- status classification (drives exclusion of dead items) ---- */
 function EV_isDead_(s) {
-  return /\b(cold|dead|closed|lost|declin|reject|cancel|canceled|cancelled|on[\s\-]?hold|hold|stalled|stale|inactive|archiv|dormant|abandon|no[\s\-]*response|out\s*of\s*active|not\s*pursuing|passed|junk|void|written[\s\-]?off|duplicate|superseded)\b/i.test(String(s || ''));
+  return /\b(cold|dead|closed|lost|declin|reject|cancel|canceled|cancelled|on[\s\-]?hold|hold|stalled|stale|inactive|archiv|dormant|abandon|no[\s\-]*response|out\s*of\s*active|not\s*pursuing|passed|junk|void|written[\s\-]?off|duplicate|superseded|merged)\b/i.test(String(s || ''));
 }
 function EV_isWon_(s) {
   return /\b(won|booked|approv|accepted|deposit|complete|completed|paid|invoiced|scheduled|in\s*progress)\b/i.test(String(s || ''));
 }
 /* obvious test/self/system noise that should never reach a "needs a human" list */
 function EV_isNoise_(s) {
-  var v = String(s || '');
-  // system/webhook/test noise
-  if (/\b(test|alert_ignore|sync_variant|printful|stripe\s*session|example\.com|action:\s*failed|cs_test|pi_test)\b/i.test(v)) return true;
-  // auto-reply / signature / delivery-notice lines that slip the sender guard — unambiguous, won't appear in a genuine instruction
-  // (added 2026-07-08 to stop pleasantry/auto-reply lines becoming junk "FEEDBACK" To-Dos)
-  if (/(out of office|automatic reply|auto[- ]?reply|this is an automated|do not reply|no[- ]?reply|sent from my |get outlook|unsubscribe|read receipt|delivery status notification|message wasn'?t delivered|undeliverable)/i.test(v)) return true;
-  return false;
+  return /\b(test|alert_ignore|sync_variant|printful|stripe\s*session|example\.com|action:\s*failed|cs_test|pi_test)\b/i.test(String(s || ''));
 }
 function EV_isSelfQuote_(client) {
   return /evolve\s*eco|^evolve\b/i.test(String(client || ''));
+}
+
+/* ---- ASCII-safe pass: eliminates mojibake by mapping special glyphs to clean
+ *      ASCII and stripping anything else (emoji, stray symbols). Applied to the
+ *      FINAL html so every send path (6 AM, preview, test) is byte-identical
+ *      and nothing can be mis-decoded by a non-UTF-8 email client. ---- */
+function EV_asciiSafe_(s) {
+  s = String(s == null ? '' : s);
+  var rep = {
+    '—': ' - ', '–': '-',                 // em / en dash
+    '‘': "'", '’': "'",                   // curly single quotes / apostrophe
+    '“': '"', '”': '"',                   // curly double quotes
+    '•': '-', '·': ' - ',                 // bullet / middot separator
+    '→': '->', '←': '<-', '⇒': '=>', // arrows
+    '…': '...', ' ': ' ', '­': '',    // ellipsis / nbsp / soft hyphen
+    '°': ' deg', '– ': '- '               // degree
+  };
+  s = s.replace(/[—–‘’“”•·→←⇒… ­°]/g,
+    function (c) { return Object.prototype.hasOwnProperty.call(rep, c) ? rep[c] : ''; });
+  // strip any remaining non-ASCII (emoji + symbols) so nothing can mis-encode
+  s = s.replace(/[^\x00-\x7F]/g, '');
+  return s;
 }
 
 /* ---- design tokens (borealis / aurora) ---- */
@@ -57,14 +73,14 @@ var EV_UI = {
   amber: '#b26a00', red: '#c0392b', cardbg: '#ffffff', wash: '#f3faf6'
 };
 var EV_JOKES = [
-  'Coffee in, abrasive out. In that order.',
-  'The books are balanced; the well is still haunted.',
-  'Rust never sleeps — luckily, neither does the server.',
-  'Another day, another substrate to profile.',
-  'Quotes do not close themselves. Sadly.',
-  'Make dust, not excuses.',
-  'Today’s forecast: 100% chance of follow-ups.',
-  'Blast first, invoice second, brag third.'
+  'Morning, Todd — grab a coffee, here’s the friendly lay of the land.',
+  'No fires this morning, just a gentle look at where things sit.',
+  'Good crew, good work lately. Here’s the round-up, no rush at all.',
+  'A calm scan of the day — nothing here a coffee can’t handle.',
+  'Here’s what we’re chewing on today. Easy does it.',
+  'Steady as she goes — a few things we’re chatting about below.',
+  'Nice momentum lately. Here’s the day at a glance.',
+  'Whenever you’re ready — here’s where everything’s at.'
 ];
 
 /* themed card (light body so reused light cards stay cohesive) */
@@ -118,11 +134,11 @@ function EV_buildMorningDigestHtml_() {
 
   // ---------- ONE THING ----------
   var topThing = '';
-  if (overdueActions.length) topThing = '<b>Overdue:</b> ' + EV_esc_(overdueActions[0].alert) + ' <span style="color:' + EV_UI.soft + ';">(' + EV_esc_(overdueActions[0].owner) + ', was due ' + EV_esc_(overdueActions[0].due) + ')</span>';
-  if (!topThing) { var stuck = inbox.filter(function (x) { return x.ageH != null && x.ageH >= 24; }); if (stuck.length) topThing = 'A field submission has been stuck ' + stuck[0].ageH + 'h: ' + EV_esc_(stuck[0].summary) + '.'; }
-  if (!topThing && pastLeads.length) topThing = '<b>Chase a lead:</b> ' + EV_esc_(pastLeads[0].lead) + ' — ' + EV_esc_(pastLeads[0].nextAction) + '.';
-  if (!topThing && priced.length) topThing = 'Biggest open quote: <b>' + EV_esc_(priced[0].q.client) + '</b> at ' + EV_money2_(priced[0].amt) + '. Nudge it forward.';
-  if (!topThing) topThing = 'Nothing is on fire. Enjoy the coffee, then go make some dust.';
+  if (overdueActions.length) topThing = '<b>Top of mind:</b> ' + EV_esc_(overdueActions[0].alert) + ' <span style="color:' + EV_UI.soft + ';">(' + EV_esc_(overdueActions[0].owner) + ')</span>';
+  if (!topThing) { var stuck = inbox.filter(function (x) { return x.ageH != null && x.ageH >= 24; }); if (stuck.length) topThing = 'A field note has been waiting ' + stuck[0].ageH + 'h — worth a peek when you can: ' + EV_esc_(stuck[0].summary) + '.'; }
+  if (!topThing && pastLeads.length) topThing = '<b>A lead to circle back to:</b> ' + EV_esc_(pastLeads[0].lead) + ' — ' + EV_esc_(pastLeads[0].nextAction) + '.';
+  if (!topThing && priced.length) topThing = 'Biggest open quote: <b>' + EV_esc_(priced[0].q.client) + '</b> at ' + EV_money2_(priced[0].amt) + '. Might be a nice one to nudge along.';
+  if (!topThing) topThing = 'Nothing pressing this morning — enjoy the coffee. ☕';
 
   var H = [];
   H.push('<div style="background:#eef3f0;padding:18px 0;font-family:-apple-system,Segoe UI,Roboto,Arial,sans-serif;">');
@@ -142,14 +158,14 @@ function EV_buildMorningDigestHtml_() {
   H.push(EV_v2tile_(EV_money2_(pipeline).replace('.00', ''), 'Active pipeline', EV_UI.neon));
   H.push(EV_v2tile_(String(activeQuotes.length), 'Open quotes', '#7fe9b4'));
   H.push(EV_v2tile_(String(wonQuotes.length), 'Won / booked', '#7fe9b4'));
-  H.push(EV_v2tile_(String(overdueCount), 'Need chasing', overdueCount ? '#ff9b6b' : '#7fe9b4'));
+  H.push(EV_v2tile_(String(overdueCount), 'On our radar', '#7fe9b4'));
   H.push('</tr></table></div>');
 
   // ===== BODY WRAP =====
   H.push('<div style="background:#f6faf8;border:1px solid ' + EV_UI.line + ';border-top:0;border-radius:0 0 14px 14px;padding:6px 16px 16px;">');
 
   // ONE THING
-  H.push(EV_v2card_('🎯', 'One thing not to drop today', '<div style="font-size:15px;color:' + EV_UI.body + ';line-height:1.45;">' + topThing + '</div>', EV_UI.amber));
+  H.push(EV_v2card_('🎯', 'One gentle focus for today', '<div style="font-size:15px;color:' + EV_UI.body + ';line-height:1.45;">' + topThing + '</div>', EV_UI.amber));
 
   // ===== NEEDS FOLLOW-THROUGH (deduped, dead excluded, capped) =====
   var seenFt = {}, ft = [];
@@ -160,15 +176,15 @@ function EV_buildMorningDigestHtml_() {
   overdueActions.forEach(function (a) {
     if (/^\s*lead\b.*past[\s-]*due next action/i.test(a.alert)) return; // leads loop covers it
     if (/^\s*quote\s+eco-.*unanswered/i.test(a.alert)) return;          // quotes loop covers it
-    addFt('a:' + a.alert, 0, EV_v2pill_('OVERDUE', '#fbe3df', EV_UI.red) + ' ' + EV_esc_(a.alert) +
-      ' <span style="color:' + EV_UI.soft + ';">(' + EV_esc_(a.owner) + ', due ' + EV_esc_(a.due) + ')</span>');
+    addFt('a:' + a.alert, 0, EV_v2pill_('circling back', '#eaf3ee', EV_UI.teal) + ' ' + EV_esc_(a.alert) +
+      ' <span style="color:' + EV_UI.soft + ';">(' + EV_esc_(a.owner) + ')</span>');
   });
   activeQuotes.forEach(function (q) {
     if (!/sent|resent|await|pending/i.test(String(q.status)) || !q.dateObj) return;
     var d = EV_daysBetween_(q.dateObj, now); if (d < 3) return;
     var amt = EV_moneyMaybe_(q.total);
     addFt('q:' + q.no, d >= 7 ? 1 : 2, (d >= 7 ? EV_v2pill_(d + 'd', '#fff1d6', EV_UI.amber) + ' ' : '') +
-      'Quote ' + EV_esc_(q.no) + ' — ' + EV_esc_(q.client) + (amt ? ' (' + amt + ')' : '') + ' sent ' + d + 'd ago, no reply yet');
+      'Quote ' + EV_esc_(q.no) + ' — ' + EV_esc_(q.client) + (amt ? ' (' + amt + ')' : '') + ' sent ' + d + 'd ago — no word back just yet');
   });
   pastLeads.forEach(function (l) {
     addFt('l:' + l.lead, 1, 'Lead <b>' + EV_esc_(l.lead) + '</b>: ' + EV_esc_(l.nextAction || 'follow up') +
@@ -176,15 +192,15 @@ function EV_buildMorningDigestHtml_() {
   });
   activeQuotes.forEach(function (q) {
     if (!q.validDate) return; var dl = EV_daysBetween_(now, q.validDate);
-    if (dl >= 0 && dl <= 7) addFt('e:' + q.no, 1, EV_v2pill_('EXPIRES ' + dl + 'd', '#ede7fb', EV_UI.purple) +
-      ' Quote ' + EV_esc_(q.no) + ' (' + EV_esc_(q.client) + ') expires soon');
+    if (dl >= 0 && dl <= 7) addFt('e:' + q.no, 1, EV_v2pill_('good ~' + dl + 'd', '#ede7fb', EV_UI.purple) +
+      ' Quote ' + EV_esc_(q.no) + ' (' + EV_esc_(q.client) + ') is good for about ' + dl + ' more day(s)');
   });
   ft.sort(function (a, b) { return a.r - b.r; });
   if (ft.length) {
-    var shown = ft.slice(0, 12);
-    var more = ft.length > 12 ? '<div style="font-size:12px;color:' + EV_UI.soft + ';margin-top:6px;">+' + (ft.length - 12) + ' more open item(s).</div>' : '';
-    H.push(EV_v2card_('🪝', 'Needs follow-through', '<ul style="margin:0;padding-left:18px;font-size:14px;color:' + EV_UI.body + ';line-height:1.5;">' +
-      shown.map(function (x) { return '<li style="margin:5px 0;">' + x.html + '</li>'; }).join('') + '</ul>' + more, EV_UI.red));
+    var shown = ft.slice(0, 16);
+    var more = ft.length > 16 ? '<div style="font-size:12px;color:' + EV_UI.soft + ';margin-top:6px;">+' + (ft.length - 16) + ' more we’re keeping an eye on.</div>' : '';
+    H.push(EV_v2card_('🌿', 'Things we’re working on', '<ul style="margin:0;padding-left:18px;font-size:14px;color:' + EV_UI.body + ';line-height:1.5;">' +
+      shown.map(function (x) { return '<li style="margin:5px 0;">' + x.html + '</li>'; }).join('') + '</ul>' + more, EV_UI.teal));
   }
 
   // ===== PIPELINE & OBSERVATIONS (computed LIVE so figures are always current) =====
@@ -198,16 +214,16 @@ function EV_buildMorningDigestHtml_() {
       top.map(function (x) { return EV_esc_(x.q.client) + ' ' + EV_money2_(x.amt); }).join(' · ') + '.');
     if (priced[0]) {
       var bigPct = pipeline > 0 ? Math.round(priced[0].amt / pipeline * 100) : 0;
-      obs.push('Biggest single quote: <b>' + EV_esc_(priced[0].q.client) + '</b> at ' + EV_money2_(priced[0].amt) + ' (' + bigPct + '% of pipeline) — single-threaded risk if it slips.');
+      obs.push('Biggest single quote: <b>' + EV_esc_(priced[0].q.client) + '</b> at ' + EV_money2_(priced[0].amt) + ' (' + bigPct + '% of pipeline) — a lovely big one to keep warm.');
     }
   }
   if (wonQuotes.length) {
     var wsum = wonQuotes.reduce(function (s, q) { var a = EV_amt_(q.total); return s + (isNaN(a) ? 0 : a); }, 0);
-    obs.push('Recently won / booked: <b>' + wonQuotes.length + '</b> quote' + (wonQuotes.length === 1 ? '' : 's') + (wsum > 0 ? ' worth ' + EV_money2_(wsum) : '') + ' — convert deposits to scheduled dates.');
+    obs.push('Recently won / booked: <b>' + wonQuotes.length + '</b> quote' + (wonQuotes.length === 1 ? '' : 's') + (wsum > 0 ? ' worth ' + EV_money2_(wsum) : '') + ' — nice work; we’ll turn these deposits into scheduled dates.');
   }
-  if (overdueCount) obs.push('<b>' + overdueCount + '</b> item' + (overdueCount === 1 ? '' : 's') + ' past their follow-up date (see above).');
+  if (overdueCount) obs.push('<b>' + overdueCount + '</b> item' + (overdueCount === 1 ? '' : 's') + ' we’re circling back on (see above).');
   if (obs.length) {
-    H.push(EV_v2card_('📊', 'Pipeline & observations', '<ul style="margin:0;padding-left:18px;font-size:14px;color:' + EV_UI.body + ';line-height:1.5;">' +
+    H.push(EV_v2card_('📊', 'Where things stand', '<ul style="margin:0;padding-left:18px;font-size:14px;color:' + EV_UI.body + ';line-height:1.5;">' +
       obs.map(function (o) { return '<li style="margin:5px 0;">' + o + '</li>'; }).join('') + '</ul>', EV_UI.teal));
   }
 
@@ -282,11 +298,32 @@ function EV_buildMorningDigestHtml_() {
   // ===== TO-DO (reuse existing card) =====
   try { H.push(EV_todoCard_(todos) || ''); } catch (e) {}
 
+  // ===== FUN STUFF WE’RE BUILDING (warm, tentative — exciting works in progress) =====
+  H.push(EV_v2card_('✨', 'Fun stuff we’re building', '<ul style="margin:0;padding-left:18px;font-size:14px;color:' + EV_UI.body + ';line-height:1.5;">' +
+    '<li style="margin:5px 0;">A driveway <b>sealing</b> service — quietly researching products and process to see if it’s a nice add-on.</li>' +
+    '<li style="margin:5px 0;">Exploring a few <b>short-term / bridge funding</b> options to keep cash flow comfy while we grow.</li>' +
+    '<li style="margin:5px 0;">Funding side is moving — the expansion plan’s done, and we’re onto the exciting part.</li>' +
+    '</ul>', EV_UI.neon));
+
+  // ===== A FEW THINGS TO CHAT ABOUT (soft; full running list linked) =====
+  var chatUrl = ''; try { var _cs = EV_sheet_("Tomorrow's Chat"); if (_cs) chatUrl = EV_book_().getUrl() + '#gid=' + _cs.getSheetId(); } catch (e) {}
+  var chatInner = '<ul style="margin:0 0 6px;padding-left:18px;font-size:14px;color:' + EV_UI.body + ';line-height:1.5;">' +
+    '<li style="margin:5px 0;">A couple of wins worth a quick high-five from the last few weeks.</li>' +
+    '<li style="margin:5px 0;">Two exciting new enquiries to chat through — the Jasper fireplaces (eight of them!) and a possible Costco job.</li>' +
+    '<li style="margin:5px 0;">Loose thoughts on the two buses, the downtown brick bid, sealing, and funding — no decisions needed.</li>' +
+    '</ul>' +
+    (chatUrl ? '<div style="font-size:13px;color:' + EV_UI.soft + ';">Our running list is here whenever you fancy a look → <a href="' + chatUrl + '" style="color:' + EV_UI.teal + ';font-weight:bold;">things to chat about</a></div>' : '');
+  H.push(EV_v2card_('🗒️', 'A few things to chat about (no rush)', chatInner, EV_UI.teal));
+
+  // ===== EQUIPMENT MAINTENANCE (reads the Maintenance tab; gentle next-due heads-up) =====
+  try { H.push(EV_maintenanceCard_() || ''); } catch (e) {}
+
   // ===== REMINDERS (standing) =====
-  H.push(EV_v2card_('📌', 'Reminders', '<ul style="margin:0;padding-left:18px;font-size:14px;color:' + EV_UI.body + ';line-height:1.5;">' +
-    '<li style="margin:5px 0;">Collect small payments <b>UPFRONT</b>. We do <b>NOT</b> take any job under <b>$350</b> (our minimum).</li>' +
-    '<li style="margin:5px 0;">We now offer a <b>3% referral fee</b>, added to the cost of referred jobs — mention it to happy customers.</li>' +
-    '<li style="margin:5px 0;">When quoting <b>any</b> customer, always collect their <b>email address</b> — needed for quotes, invoices, and receipts.</li>' +
+  H.push(EV_v2card_('📌', 'Little habits we’re building', '<ul style="margin:0;padding-left:18px;font-size:14px;color:' + EV_UI.body + ';line-height:1.5;">' +
+    '<li style="margin:5px 0;"><b>New this week:</b> we’ve added a safety sign-off (FLHA) to the field app — giving it a first run today. Before each job, the crew does a quick hazard check and signs off before blasting. A couple of taps, everyone stays safe, and it looks sharp to clients.</li>' +
+    '<li style="margin:5px 0;">Where it feels right, we’re trying to collect small payments up front, and generally keeping new jobs around our usual <b>$350+</b> range.</li>' +
+    '<li style="margin:5px 0;">We’ve started a friendly <b>3% referral thank-you</b> (added to the referred job) — nice to mention to happy customers.</li>' +
+    '<li style="margin:5px 0;">When we’re quoting, it’s handy to grab the customer’s <b>email</b> — makes sending quotes, invoices, and receipts easy.</li>' +
     '</ul>', EV_UI.purple));
 
   // ===== SYSTEM HEALTH (compact, summarized — no 49× repetition) =====
@@ -307,7 +344,13 @@ function EV_buildMorningDigestHtml_() {
     'Sent server-side by Evolve Autopilot at 6 AM, every day.</div>');
 
   H.push('</div></div></div>'); // body / container / page
-  return H.join('');
+  // Wrap in a proper UTF-8 document + run the ASCII-safe pass so no email client
+  // can mis-decode the bytes (this is the single output for 6 AM, preview, AND test).
+  var _doc = '<!DOCTYPE html><html lang="en"><head><meta charset="utf-8">' +
+    '<meta http-equiv="Content-Type" content="text/html; charset=UTF-8">' +
+    '<meta name="viewport" content="width=device-width, initial-scale=1"></head>' +
+    '<body style="margin:0;padding:0;background:#eef3f0;">' + H.join('') + '</body></html>';
+  return EV_asciiSafe_(_doc);
 }
 
 /* v2 build marker: 2026-06-22 push-resync */

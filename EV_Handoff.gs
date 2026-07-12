@@ -104,10 +104,9 @@ function EV_deletePersonalDigestTrigger(){
   Logger.log('Remaining triggers: ' + JSON.stringify(ScriptApp.getProjectTriggers().map(function(t){return t.getHandlerFunction();})));
   return { removed: removed };
 }
-// Renamed 2026-07-08 from EV_listTriggers → EVH_listTriggers to end a silent name collision:
-// AutoServer.js also defines EV_listTriggers, and this file (loading later alphabetically) was
-// overriding it. AutoServer's EV_listTriggers is now the single canonical one. This EVH_ copy
-// stays as a diagnostic in the EV_Handoff namespace.
+// Renamed EV_listTriggers → EVH_listTriggers (2026-07-08, re-applied 2026-07-11 after a stale-copy
+// push restored the duplicate): AutoServer.js also defines EV_listTriggers and this file loads later
+// alphabetically, silently overriding it. AutoServer's is the single canonical one.
 function EVH_listTriggers(){
   var t = ScriptApp.getProjectTriggers().map(function(x){ return x.getHandlerFunction() + ' | ' + x.getEventType(); });
   Logger.log('TRIGGERS('+t.length+'): ' + JSON.stringify(t));

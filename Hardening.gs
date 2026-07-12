@@ -72,9 +72,9 @@ function EV_normNums_(s) {
  *  signs and parentheses are preserved (refunds read as negative). */
 function EV_amounts_(s, moneyOnly) {
   var str = EV_normNums_(s), out = [], m;
-  // FIX (2026-07-08): integer body now allows '.' grouping so a EU-format total like
-  // "1.234,56" is captured as ONE token (was split into 1.23 + 4.56 → booked $4.56).
-  // EV_amount_ resolves the separators. Verified: all NA formats unchanged (0 regressions).
+  // FIX (2026-07-08, re-applied 2026-07-11 after a stale-copy push reverted it): integer body allows
+  // '.' grouping so a EU-format total like "1.234,56" is ONE token (was split into 1.23 + 4.56 →
+  // booked $4.56). EV_amount_ resolves separators. Verified: all NA formats unchanged (0 regressions).
   var re = /(\()?\s*(\$)?\s*(-?\d[\d.,]*\d|-?\d)\s*(\))?/g;
   while ((m = re.exec(str)) !== null) {
     if (!m[3]) continue;

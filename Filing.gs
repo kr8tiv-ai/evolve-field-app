@@ -229,9 +229,9 @@ function EV_isDupReceipt_(book, det, sub){
     var lastRow=rl.getLastRow(); if(lastRow<2) return false;
     var v=rl.getRange(2,1,lastRow-1,12).getValues(); // Date,Vendor,Category,Subtotal,GST,Total,...,Source(12)
     var key=EV_norm_(det.vendor||det.where||det.store||'');
-    // FIX (2026-07-08): dedupe now reads the total from the SAME source the booker uses
-    // (EV_findAmount_ → total/amount/amountDue/…), so a receipt whose amount lives in a
-    // non-"total" field is still matched and not double-filed.
+    // FIX (2026-07-08, re-applied 2026-07-11): dedupe reads the total from the SAME source the booker
+    // uses (EV_findAmount_ → total/amount/amountDue/…) so a receipt whose amount lives in a
+    // non-"total" field is still matched and never double-filed.
     var tot=(typeof EV_findAmount_==='function')?EV_findAmount_(det):EV_amount_(det.total);
     if(tot==='') tot=NaN;
     var d=EV_toDate_(det.date);

@@ -789,7 +789,7 @@ function EV_addToDo_(text, from) {
     var nums = EV_todoItems_().map(function (t) { return +t.num; });
     var next = (nums.length ? Math.max.apply(null, nums) : 0) + 1;
     var who = (from || '').replace(/.*</, '').replace(/>.*/, '') || from;
-    sh.appendRow([String(next), text, 'Inbox / Reply', 'Medium', 'To Do', EV_fmt_(EV_now_(), 'yyyy-MM-dd'), '', 'Added automatically from an email reply (' + who + ')']);   // FIX 2026-07-08: ISO date (was MM/dd/yyyy → misread day-first as a month early/late)
+    sh.appendRow([String(next), text, 'Inbox / Reply', 'Medium', 'To Do', EV_fmt_(EV_now_(), 'yyyy-MM-dd'), '', 'Added automatically from an email reply (' + who + ')']);
     appLog_('Autopilot', 'To-Do +1 from reply: ' + text.slice(0, 80));
     return true;
   } catch (e) { return false; }
@@ -802,7 +802,7 @@ function EV_addToDoCat_(text, from, category, priority) {
     var nums = EV_todoItems_().map(function (t) { return +t.num; });
     var next = (nums.length ? Math.max.apply(null, nums) : 0) + 1;
     var who = (from || '').replace(/.*</, '').replace(/>.*/, '') || from;
-    sh.appendRow([String(next), text, category || 'Inbox / Reply', priority || 'Medium', 'To Do', EV_fmt_(EV_now_(), 'yyyy-MM-dd'), '', 'From an email reply (' + who + ')']);   // FIX 2026-07-08: ISO date (was MM/dd/yyyy → misread day-first)
+    sh.appendRow([String(next), text, category || 'Inbox / Reply', priority || 'Medium', 'To Do', EV_fmt_(EV_now_(), 'yyyy-MM-dd'), '', 'From an email reply (' + who + ')']);
     appLog_('Autopilot', 'To-Do +1 [' + (category || 'Reply') + '] from reply: ' + String(text).slice(0, 80));
     return true;
   } catch (e) { return false; }
@@ -1016,7 +1016,7 @@ function EV_scheduleProof() {
 function EV_proofRun() {
   EV_deleteTriggers_(['EV_proofRun']); // one-shot cleanup
   var stamp = EV_fmt_(EV_now_(), 'yyyy-MM-dd HH:mm:ss');
-  var html = EV_buildMorningDigestHtml_();   // FIX 2026-07-08: canonical v2 builder (was V3 → proof email didn't match the real digest)
+  var html = EV_buildDigestV3_();
   html = '<div style="background:#1a7f37;color:#fff;padding:8px 12px;font-family:Arial;border-radius:6px;margin-bottom:8px;">' +
     'AUTONOMY PROOF — fired by an Apps Script time trigger on Google\'s servers at ' + stamp +
     ' (America/Edmonton). No PC, no Claude app involved.</div>' + html;
@@ -1353,8 +1353,8 @@ function EV_brainExpenses_(book){
     if(notes.indexOf("seed row")>=0||notes.indexOf("baseline market")>=0||notes.indexOf("auto from price log")>=0) continue;
     if(vendor.toLowerCase().indexOf("test")>=0) continue;
     if(!vendor) continue; // skip footer/total + blank rows
-    // FIX (2026-07-08): Number("1,234.56") is NaN → row was silently dropped from the spend brain,
-    // undercounting totals/top-vendor insights. EV_amount_ parses comma/EU totals correctly.
+    // FIX (2026-07-08, re-applied 2026-07-11): Number("1,234.56") is NaN → row silently dropped
+    // from the spend brain. EV_amount_ parses comma/EU totals correctly.
     var amt=(typeof EV_amount_==='function')?EV_amount_(row[cT]):Number(row[cT]); if(isNaN(amt)||amt===0) continue;
     var dt=row[cD]; if(!(dt instanceof Date)){ try{ dt=EV_toDate_(dt); }catch(e){ dt=null; } }
     out.push({date:dt,vendor:vendor,category:String(row[cC]||"Uncategorized").trim(),amount:amt,what:String(row[cW]||"")});
