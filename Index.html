@@ -422,6 +422,9 @@ footer{text-align:center;padding:30px 0 10px;color:var(--faint);font-size:.66rem
       <div class="chips" id="fl_hazards"></div>
       <div class="field"><label class="fld">Other hazards on site</label><input id="fl_hazOther" placeholder="anything not listed above"></div>
 
+      <div class="sec-label"><span class="bar"></span><span>How we mitigated each hazard <span class="req">*</span></span></div>
+      <div id="fl_mitig"></div>
+
       <div class="sec-label"><span class="bar"></span><span>Overall risk after controls</span></div>
       <div class="risk3" id="fl_risk">
         <button type="button" class="risk low" data-v="Low" onclick="flRisk(this)">Low<small>proceed</small></button>
@@ -559,6 +562,53 @@ footer{text-align:center;padding:30px 0 10px;color:var(--faint);font-size:.66rem
   </div>
 </div>
 
+<!-- FLHA lifecycle chooser: today already has an open FLHA -->
+<div class="modal" id="flhaChooser">
+  <div class="sheet">
+    <div style="display:flex;align-items:center"><h2>Today's FLHA</h2>
+      <button class="ghost-btn" style="margin-left:auto" onclick="closeFlhaChooser()">Close</button></div>
+    <p class="dim" style="font-size:.86rem;margin-top:8px" id="fcJob"></p>
+    <button class="btn" style="margin-top:14px" onclick="chooserAmend()">➕ Update — add a hazard / conditions changed</button>
+    <button class="btn" style="margin-top:10px;background:var(--safety);border-color:var(--safety)" onclick="chooserCloseout()">🌇 End-of-day sign-off</button>
+    <button class="btn sec" style="margin-top:10px" onclick="chooserNew()">Start a NEW FLHA (new job / site)</button>
+  </div>
+</div>
+
+<!-- FLHA mid-shift amendment -->
+<div class="modal" id="amendModal">
+  <div class="sheet">
+    <div style="display:flex;align-items:center"><h2>Update Today's FLHA</h2>
+      <button class="ghost-btn" style="margin-left:auto" onclick="closeAmend()">Close</button></div>
+    <p class="dim" style="font-size:.86rem;line-height:1.5;margin-top:8px">Conditions changed? New hazard showed up? Record it — it's added to today's FLHA with your name and the time.</p>
+    <div class="sec-label"><span class="bar"></span><span>New hazard — tap if one applies</span></div>
+    <div class="chips" id="am_hazards"></div>
+    <div class="field"><label class="fld">What changed / what we did about it</label>
+      <textarea id="am_text" placeholder="e.g. Wind picked up mid-morning — added a second tarp wall on the north side and moved the exclusion zone out."></textarea></div>
+    <div class="photo-zone" onclick="document.getElementById('am_photoInput').click()" style="margin-top:8px">
+      <div class="pic">📷</div><div class="t">Add a photo (optional)</div><div class="s">Show the change</div>
+    </div>
+    <input id="am_photoInput" type="file" accept="image/*" multiple style="display:none" onchange="handlePhotos(this.files,'amend')">
+    <div class="thumbs" id="thumbs_amend"></div>
+    <button class="btn" id="amendBtn" style="margin-top:14px" onclick="amendSubmit()">Add to Today's FLHA</button>
+  </div>
+</div>
+
+<!-- FLHA end-of-day closeout -->
+<div class="modal" id="closeoutModal">
+  <div class="sheet">
+    <div style="display:flex;align-items:center"><h2>End-of-Day Sign-Off</h2>
+      <button class="ghost-btn" style="margin-left:auto" onclick="closeCloseout()">Close</button></div>
+    <p class="dim" style="font-size:.86rem;margin-top:6px" id="coJob"></p>
+    <p class="dim" style="font-size:.86rem;line-height:1.5;margin-top:8px">Close out the day: note any incidents or changes, then <b>everyone signs out with their own PIN</b>. This emails Matt &amp; Todd the day summary.</p>
+    <div class="field"><label class="fld">End-of-day notes (incidents? near-misses? anything for tomorrow?)</label>
+      <textarea id="co_note" placeholder="e.g. No incidents. Compressor oil is low — top up before tomorrow."></textarea></div>
+    <div class="sec-label"><span class="bar"></span><span>Crew sign-out <span class="req">*</span></span></div>
+    <div id="co_sigs" class="sigwrap"></div>
+    <button class="btn sec" type="button" onclick="flhaOpenSign('closeout')">＋ Add sign-out</button>
+    <button class="btn" id="closeoutBtn" style="margin-top:14px;background:var(--safety);border-color:var(--safety)" onclick="closeoutSubmit()">Close Out the Day</button>
+  </div>
+</div>
+
 <!-- FLHA sign-off modal -->
 <div class="modal" id="signModal">
   <div class="sheet">
@@ -644,6 +694,9 @@ footer{text-align:center;padding:30px 0 10px;color:var(--faint);font-size:.66rem
   R.apiFlhaSign=function(n,p){return (p&&p.length===4)?{ok:true,name:n,role:(n==='Todd'||n==='Matt')?'admin':'crew',ts:Date.now(),sig:'demo-'+n}:{ok:false,error:'Wrong PIN.'};};
   R.apiFlhaSubmit=function(pl){return {ok:true,id:'FLHA-DEMO-01',pdfUrl:'',emailed:false,signers:((pl&&pl.signatures)||[]).map(function(s){return s.name;}),message:'FLHA logged (demo).'};};
   R.apiHazardReport=function(pl){return {ok:true,id:'HZ-DEMO-01',emailed:false,message:'Reported to management (demo).'};};
+  R.apiFlhaToday=function(){return {ok:true,items:window.__DEMO_FLHA_OPEN__?[{id:'FLHA-DEMO-01',jobTask:'aggregate driveway blast',location:'10824 67 Ave',crew:'Todd, Aaron',amendments:''}]:[]};};
+  R.apiFlhaAmend=function(pl){return {ok:true,message:'FLHA updated (demo).'};};
+  R.apiFlhaCloseout=function(pl){return {ok:true,emailed:false,signers:((pl&&pl.signatures)||[]).map(function(s){return s.name;}),message:'Day closed out (demo).'};};
   var scriptObj={}; Object.defineProperty(scriptObj,'run',{get:function(){return makeRunner();}});
   window.google={script:scriptObj};
   window.__DEMO__=true;
@@ -1402,7 +1455,7 @@ function addUser(){
 /* ================= FLHA / SAFETY ========= */
 var FLHA_HAZARDS=['Respirable dust (silica-free media)','Lead / hazardous coatings','Noise','Compressed air / hose whip','Stored energy / pressure surge','Flying debris / eye injury','Media / abrasive handling','Slips / trips / falls','Public / pedestrians nearby','Traffic / vehicles','Overspray / containment','Overhead / underground lines','Lockout / stored energy','Fumes / solvents','Confined space','Sharp edges / metal','Heat stress / dehydration','Cold / ice','Sun / UV exposure','Working at heights','Working alone','Poor housekeeping','Fuel / fire (compressor·generator)','WHMIS / SDS on site'];
 var FLHA_CONTROLS=['Silica-free media','Containment / shrouds','Tarps / masking','Whip checks + deadman','Exclusion zone / barriers','Delineation (pylons·signage)','Spotter / flagger','Spray area watched','SDS reviewed','Lockout / tag-out','Ventilation','Housekeeping / clear paths','Supplied-air blast hood','Hearing protection','Eye / face protection','Gloves','Coveralls','Bystanders cleared','Hydration / rest breaks','Fall protection','Spill kit ready'];
-var FLHA_PPE=['Blast hood / supplied air','Respirator','Hearing protection','Eye / face','Gloves','Coveralls','Steel-toe boots','Hi-vis','Hard hat','Fall harness'];
+var FLHA_PPE=['Blast hood / supplied air','Respirator','Double hearing protection (plugs + muffs)','Hearing protection','Safety glasses / eye & face','Gloves','Coveralls','Steel-toe boots','Hi-vis','Hard hat','Fall harness'];
 var FLHA_WEATHER=['Clear','Cloudy','Rain','Snow','Windy','Hot','Cold','Icy'];
 // Grouped pre-work checklist (Yes / No / N/A). Covers equipment & pressure safety,
 // site & containment, and crew readiness. Each item is answered before work starts.
@@ -1416,7 +1469,9 @@ var FLHA_CHECKS=[
     'Compressor: oil checked',
     'Compressor: fuel / gas checked',
     'Generator: fuel topped up + inspected',
-    'All lines checked for leaks (no valves leaking)',
+    'Walked down ALL hoses checking for leaks (no valves leaking)',
+    'Quarter-turn valves OFF at startup — no flow can reach the gun',
+    'Gun never pointed at people, the house, or any object (accidental discharge)',
     'Deadman / safety valves working',
     'Hoses / couplings secure'
   ]},
@@ -1428,8 +1483,10 @@ var FLHA_CHECKS=[
     'Obstructions cleared / nothing in the way',
     'Abrasive media adequately contained',
     'Spray area monitored during blasting',
+    'Surfaces near work protected — no marking / damage from high pressure',
     'Overhead hazards / power lines checked',
     'Public / pedestrians controlled',
+    'Homeowner / everyone on premises informed we’re blasting',
     'Wind acceptable for blasting + containment',
     'Spill kit / cleanup plan ready'
   ]},
@@ -1437,14 +1494,26 @@ var FLHA_CHECKS=[
     'Water on site (hydration)',
     'First-aid kit on site',
     'Fire extinguisher on site',
-    'SDS available (media & coatings)',
+    'Crew told about ALL chemicals in use (SDS reviewed together)',
     'All risks reviewed & mitigated'
   ]}
 ];
-var FL={place:'',risk:'',hazards:{},controls:{},ppe:{},weather:{},checks:{},youngWorker:'',sigs:[],signPin:''};
+// per-hazard mitigation picks — tap one, or "Other…" to type your own
+var FLHA_MITIG_OPTIONS=['Silica-free media + dust control','Containment / tarps / masking','Whip checks + deadman + valves off at startup','Exclusion zone / signage / spotter','Distance / low pressure / low angle','PPE worn (hood · hearing · eye · gloves)','Double hearing protection (plugs + muffs)','Surface protection in place','Homeowner / public informed & cleared','Walked hoses / leak check done','Lockout / de-energized','Housekeeping / clear paths','Hydration / rest breaks / rotation','SDS reviewed / chemicals communicated','Monitoring during blasting','Other…'];
+var FL={place:'',risk:'',hazards:{},controls:{},ppe:{},weather:{},checks:{},mitig:{},youngWorker:'',sigs:[],signPin:'',signMode:'flha'};
+var FLT={open:null};      // today's open FLHA (from apiFlhaToday)
+var CO={sigs:[]};         // end-of-day closeout signatures
 
-function openFlha(){
-  FL={place:'',risk:'',hazards:{},controls:{},ppe:{},weather:{},checks:{},youngWorker:'',sigs:[],signPin:''};
+/* Safety tile entry: if today already has an open FLHA, offer Update / End-of-day / New. */
+function openFlha(forceNew){
+  if(forceNew!==true){
+    call('apiFlhaToday',[S.token],function(res){
+      if(res&&res.ok&&res.items&&res.items.length){ FLT.open=res.items[0]; openFlhaChooser(); }
+      else { openFlha(true); }
+    },function(){ openFlha(true); });
+    return;
+  }
+  FL={place:'',risk:'',hazards:{},controls:{},ppe:{},weather:{},checks:{},mitig:{},youngWorker:'',sigs:[],signPin:'',signMode:'flha'};
   S.photos['flha']=[];
   ['fl_location','fl_job','fl_hazOther','fl_controlsNote','fl_jobHaz','fl_hospital','fl_muster','fl_firstaid','fl_emContact','fl_supervisedBy','fl_notes','fl_time'].forEach(function(id){var e=document.getElementById(id);if(e)e.value='';});
   var ack=document.getElementById('fl_riskAck'); if(ack)ack.checked=false;
@@ -1455,15 +1524,41 @@ function openFlha(){
   document.querySelectorAll('#fl_risk .risk').forEach(function(b){b.classList.remove('on');});
   document.querySelectorAll('#fl_young button').forEach(function(b){b.classList.remove('on');});
   var sb=document.getElementById('fl_supervisedByRow'); if(sb)sb.style.display='none';
-  flChips('fl_hazards',FLHA_HAZARDS,FL.hazards);
+  flChips('fl_hazards',FLHA_HAZARDS,FL.hazards,renderMitig);
   flChips('fl_controls',FLHA_CONTROLS,FL.controls);
   flChips('fl_ppe',FLHA_PPE,FL.ppe);
   flChips('fl_weather',FLHA_WEATHER,FL.weather);
   flChecks();
+  renderMitig();
   renderThumbs('flha');
   flPopulateSignNames();
   renderSigs();
   switchScreen('flha');
+}
+/* ---- per-hazard mitigation rows: every tapped hazard gets a "how we mitigated it" pick ---- */
+function renderMitig(){
+  var box=document.getElementById('fl_mitig'); if(!box)return;
+  var selected=Object.keys(FL.hazards);
+  // drop stored mitigations for hazards that were un-tapped
+  Object.keys(FL.mitig).forEach(function(h){ if(!FL.hazards[h])delete FL.mitig[h]; });
+  if(!selected.length){ box.innerHTML='<div class="sig-empty">Tap hazards above — each one gets a “how we mitigated it” line here.</div>'; return; }
+  box.innerHTML='';
+  selected.forEach(function(h){
+    var m=FL.mitig[h]||(FL.mitig[h]={sel:'',other:''});
+    var row=document.createElement('div');row.className='field';row.style.marginTop='10px';
+    var lbl=document.createElement('label');lbl.className='fld';lbl.innerHTML=esc(h)+' <span class="req">*</span>';
+    row.appendChild(lbl);
+    var sel=document.createElement('select');
+    var blank=document.createElement('option');blank.value='';blank.textContent='How did we mitigate it?';sel.appendChild(blank);
+    FLHA_MITIG_OPTIONS.forEach(function(o){var op=document.createElement('option');op.value=o;op.textContent=o;if(m.sel===o)op.selected=true;sel.appendChild(op);});
+    row.appendChild(sel);
+    var oth=document.createElement('input');oth.placeholder='Describe how you mitigated it';oth.style.marginTop='8px';
+    oth.style.display=(m.sel==='Other…')?'block':'none';oth.value=m.other||'';
+    oth.oninput=function(){m.other=oth.value;};
+    sel.onchange=function(){m.sel=sel.value;oth.style.display=(sel.value==='Other…')?'block':'none';};
+    row.appendChild(oth);
+    box.appendChild(row);
+  });
 }
 function flYoung(btn){ FL.youngWorker=btn.dataset.v; document.querySelectorAll('#fl_young button').forEach(function(b){b.classList.remove('on');}); btn.classList.add('on');
   var row=document.getElementById('fl_supervisedByRow'); if(row)row.style.display=(FL.youngWorker==='Yes')?'block':'none';
@@ -1481,11 +1576,12 @@ function flUploadPhotos(key,cat,cb){
       function(){ failed++; next(i+1); });
   })(0);
 }
-function flChips(containerId,list,store){
+function flChips(containerId,list,store,onToggle){
   var box=document.getElementById(containerId);box.innerHTML='';
   list.forEach(function(label){
     var c=document.createElement('div');c.className='chip';c.textContent=label;
-    c.onclick=function(){ if(store[label]){delete store[label];c.classList.remove('on');} else {store[label]=1;c.classList.add('on');} };
+    if(store[label])c.classList.add('on');
+    c.onclick=function(){ if(store[label]){delete store[label];c.classList.remove('on');} else {store[label]=1;c.classList.add('on');} if(onToggle)onToggle(); };
     box.appendChild(c);
   });
 }
@@ -1533,7 +1629,8 @@ function flPopulateSignNames(){
   (S.cfg.users||[]).forEach(function(n){var o=document.createElement('option');o.value=n;o.textContent=n;sel.appendChild(o);});
 }
 var _signKeypadBuilt=false;
-function flhaOpenSign(){
+function flhaOpenSign(mode){
+  FL.signMode=(mode==='closeout')?'closeout':'flha';
   FL.signPin='';
   if(!_signKeypadBuilt){
     document.querySelectorAll('#signKeypad .key').forEach(function(b){
@@ -1565,11 +1662,16 @@ function flhaDoSign(){
   call('apiFlhaSign',[name,FL.signPin],function(res){
     btn.disabled=false;
     if(!res||!res.ok){toast((res&&res.error)||'Sign-in failed',true);FL.signPin='';renderSignPin();return;}
-    FL.sigs=FL.sigs.filter(function(s){return s.name.toLowerCase()!==res.name.toLowerCase();}); // one signature per worker
-    FL.sigs.push({name:res.name,role:res.role,ts:res.ts,sig:res.sig});
+    var entry={name:res.name,role:res.role,ts:res.ts,sig:res.sig};
+    if(FL.signMode==='closeout'){
+      CO.sigs=CO.sigs.filter(function(s){return s.name.toLowerCase()!==res.name.toLowerCase();});
+      CO.sigs.push(entry); renderCoSigs();
+    } else {
+      FL.sigs=FL.sigs.filter(function(s){return s.name.toLowerCase()!==res.name.toLowerCase();}); // one signature per worker
+      FL.sigs.push(entry); renderSigs();
+    }
     FL.signPin='';
     flhaCloseSign();
-    renderSigs();
     toast(res.name+' signed ✓');
   },function(e){btn.disabled=false;toast('Could not reach server to verify PIN',true);});
 }
@@ -1598,6 +1700,14 @@ function flhaSubmit(){
   if(!controls.length&&!controlsNote)miss.push('a control');
   if(jobHaz.length<4)miss.push('a site-specific note');
   if(flChecksDone()<flChecksAll())miss.push('the pre-work checklist ('+flChecksDone()+'/'+flChecksAll()+')');
+  // every tapped hazard needs its "how we mitigated it" line
+  var mitigations=[],mitigMissing=[];
+  hazards.forEach(function(h){
+    var m=FL.mitig[h];
+    if(!m||!m.sel||(m.sel==='Other…'&&!(m.other||'').trim()))mitigMissing.push(h);
+    else mitigations.push(h+' — '+(m.sel==='Other…'?m.other.trim():m.sel));
+  });
+  if(mitigMissing.length)miss.push('how you mitigated: '+mitigMissing.join(', '));
   if(!FL.sigs.length)miss.push('at least one sign-off');
   if(miss.length){toast('Please add: '+miss.join(', '),true);return;}
   if(FL.risk==='High'&&!document.getElementById('fl_riskAck').checked){toast('High risk — tick the supervisor approval box, or lower the risk.',true);return;}
@@ -1610,7 +1720,7 @@ function flhaSubmit(){
     var payload={token:S.token,device:navigator.userAgent,signatures:FL.sigs,photoLinks:photoLinks,flha:{
       location:location,date:document.getElementById('fl_date').value,startTime:document.getElementById('fl_time').value,jobTask:job,place:FL.place,weather:Object.keys(FL.weather).join(' · '),
       hazards:hazards,otherHazards:otherHaz,risk:FL.risk,riskAck:!!(document.getElementById('fl_riskAck')&&document.getElementById('fl_riskAck').checked),
-      controls:controls,controlsNote:controlsNote,jobHazards:jobHaz,
+      controls:controls,controlsNote:controlsNote,jobHazards:jobHaz,mitigations:mitigations,
       equip:checkStr.join(' · '),ppe:Object.keys(FL.ppe),youngWorker:young,notes:document.getElementById('fl_notes').value.trim(),
       emergency:{hospital:document.getElementById('fl_hospital').value.trim(),muster:document.getElementById('fl_muster').value.trim(),firstAid:document.getElementById('fl_firstaid').value.trim(),contact:document.getElementById('fl_emContact').value.trim()}
     }};
@@ -1621,6 +1731,74 @@ function flhaSubmit(){
       showSuccess(res.message||'FLHA logged.');
     },function(e){btn.disabled=false;hideOverlay();toast('No connection — FLHA not submitted. Reconnect and try again.',true);});
   });
+}
+
+/* ---- FLHA lifecycle: chooser (update / end-of-day / new) + amend + closeout ---- */
+function openFlhaChooser(){
+  var o=FLT.open;
+  document.getElementById('fcJob').textContent=(o.jobTask||'FLHA')+' · '+(o.location||'');
+  document.getElementById('flhaChooser').classList.add('show');
+}
+function closeFlhaChooser(){document.getElementById('flhaChooser').classList.remove('show');}
+function chooserNew(){closeFlhaChooser();openFlha(true);}
+function chooserAmend(){closeFlhaChooser();openAmend();}
+function chooserCloseout(){closeFlhaChooser();openCloseout();}
+
+function openAmend(){
+  document.getElementById('am_text').value='';
+  AM={hazards:{}};
+  S.photos['amend']=[];
+  flChips('am_hazards',FLHA_HAZARDS,AM.hazards);
+  renderThumbs('amend');
+  document.getElementById('amendModal').classList.add('show');
+}
+var AM={hazards:{}};
+function closeAmend(){document.getElementById('amendModal').classList.remove('show');}
+function amendSubmit(){
+  var text=document.getElementById('am_text').value.trim();
+  var hz=Object.keys(AM.hazards);
+  if(text.length<3&&!hz.length){toast('Describe what changed or tap the new hazard',true);return;}
+  if(!navigator.onLine){toast('You need a connection to update the FLHA.',true);return;}
+  var btn=document.getElementById('amendBtn');btn.disabled=true;
+  flUploadPhotos('amend','flha',function(links,failed){
+    showOverlay('Updating FLHA…');
+    call('apiFlhaAmend',[{token:S.token,id:FLT.open.id,text:text,hazards:hz,photoLinks:links}],function(res){
+      btn.disabled=false;hideOverlay();
+      if(!res||!res.ok){toast((res&&res.error)||'Update failed',true);return;}
+      closeAmend();toast(res.message||'FLHA updated ✓');
+    },function(){btn.disabled=false;hideOverlay();toast('No connection — try again',true);});
+  });
+}
+
+function openCloseout(){
+  CO={sigs:[]};
+  document.getElementById('co_note').value='';
+  document.getElementById('coJob').textContent=(FLT.open.jobTask||'FLHA')+' · '+(FLT.open.location||'');
+  renderCoSigs();
+  document.getElementById('closeoutModal').classList.add('show');
+}
+function closeCloseout(){document.getElementById('closeoutModal').classList.remove('show');}
+function renderCoSigs(){
+  var box=document.getElementById('co_sigs');if(!box)return;box.innerHTML='';
+  if(!CO.sigs.length){box.innerHTML='<div class="sig-empty">Everyone on the crew signs out — tap “＋ Add sign-out”.</div>';return;}
+  CO.sigs.forEach(function(s){
+    var t=new Date(s.ts);var hh=('0'+t.getHours()).slice(-2),mm=('0'+t.getMinutes()).slice(-2);
+    var d=document.createElement('div');d.className='sig-chip';
+    d.innerHTML='<span class="sic">✓</span><span style="flex:1"><span class="snm">'+esc(s.name)+'</span><small>signed out '+hh+':'+mm+'</small></span>';
+    box.appendChild(d);
+  });
+}
+function closeoutSubmit(){
+  if(!CO.sigs.length){toast('At least one worker has to sign out',true);return;}
+  if(!navigator.onLine){toast('You need a connection to close out the day.',true);return;}
+  var btn=document.getElementById('closeoutBtn');btn.disabled=true;
+  showOverlay('Closing out the day…');
+  call('apiFlhaCloseout',[{token:S.token,id:FLT.open.id,note:document.getElementById('co_note').value.trim(),signatures:CO.sigs}],function(res){
+    btn.disabled=false;
+    if(!res||!res.ok){hideOverlay();toast((res&&res.error)||'Closeout failed',true);return;}
+    closeCloseout();FLT.open=null;
+    showSuccess(res.message||'Day closed out.');
+  },function(){btn.disabled=false;hideOverlay();toast('No connection — try again',true);});
 }
 
 /* ================= HAZARD / ISSUE ESCALATION ========= */

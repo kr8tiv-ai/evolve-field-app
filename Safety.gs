@@ -53,8 +53,11 @@ var FLHA_HEADERS = [
   'Job-Specific Hazards & Controls', 'Equipment Checklist', 'PPE On Site',
   'Emergency Info', 'Signatures (verified)', 'Sign-offs', 'Submitted By',
   'PDF Link', 'Status', 'Device', 'Weather', 'Site Photos',
-  'Start Time', 'New/Young Worker', 'Notes'
+  'Start Time', 'New/Young Worker', 'Notes',
+  'Per-Hazard Mitigations', 'Amendments (during shift)', 'End-of-Day Sign-off'
 ];
+// column lookups by header (1-based) — robust to future inserts
+function flhaCol_(name) { return FLHA_HEADERS.indexOf(name) + 1; }
 
 var HAZARD_HEADERS = [
   'Timestamp', 'Report ID', 'Severity', 'Hazard Type', 'Location', 'Description',
@@ -251,11 +254,15 @@ function flhaSubmitCore_(payload, opts) {
       if (/^https?:\/\//i.test(url)) photoLinks.push(url);
     });
 
+    // per-hazard mitigations: array of "Hazard — mitigation" lines built by the client
+    var mitigations = (f.mitigations || []).map(function (m) { return String(m).trim(); }).filter(String);
+
     var record = {
       id: subId, dateStr: dateStr, startTime: f.startTime || '', location: f.location, jobTask: f.jobTask, place: f.place || '',
       weather: f.weather || '', hazardsStr: hazardsStr, risk: f.risk || '', controlsStr: controlsStr,
       jobHazards: f.jobHazards || '', equipStr: equipStr, ppeStr: (f.ppe || []).join(' · '),
       emergencyStr: emergencyStr, youngWorker: f.youngWorker || '', sigLines: sigLines, crewNames: crewNames, photoLinks: photoLinks,
+      mitigations: mitigations,
       submitter: submitter.name, notes: f.notes || '', changeNote: f.changeNote || f.notes || ''
     };
 
@@ -278,7 +285,8 @@ function flhaSubmitCore_(payload, opts) {
       crewNames, hazardsStr, f.risk || '', controlsStr, f.jobHazards || '',
       equipStr, (f.ppe || []).join(' · '), emergencyStr, sigLines.join('\n'),
       verified.length, submitter.name, pdfUrl, STATUS, (payload && payload.device) || '',
-      f.weather || '', photoLinks.join('\n'), f.startTime || '', f.youngWorker || '', f.notes || ''
+      f.weather || '', photoLinks.join('\n'), f.startTime || '', f.youngWorker || '', f.notes || '',
+      mitigations.join('\n'), '', ''   // Per-Hazard Mitigations · Amendments (filled during shift) · End-of-Day Sign-off
     ]);
 
     // ---- (c) ONE branded email to matt@ + todd@ via the shared mailer, PDF attached ----
@@ -401,6 +409,13 @@ function flhaPdfHtml_(r) {
       '<tr>' + flhaMetaCell_('Location', r.location) + '<td colspan="2" style="padding:9px 12px;border:1px solid ' + FLHA_B.line + '"><div style="font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:' + FLHA_B.aurora + '">Job / Task</div><div style="font-size:14px;color:' + FLHA_B.silver + ';margin-top:2px">' + (r.jobTask ? flhaEsc_(r.jobTask) : '—') + '</div></td></tr>' +
     '</table>' +
     flhaSection_('Hazards identified', flhaChips_(r.hazardsStr)) +
+    ((r.mitigations && r.mitigations.length) ? flhaSection_('How each hazard was mitigated',
+      '<table style="width:100%;border-collapse:collapse;margin-top:4px">' + r.mitigations.map(function (m) {
+        var ix = m.indexOf(' — ');
+        var hz = ix > 0 ? m.slice(0, ix) : m, mit = ix > 0 ? m.slice(ix + 3) : '';
+        return '<tr><td style="width:42%;padding:7px 10px;border:1px solid ' + FLHA_B.line + ';font-size:12.5px;color:' + FLHA_B.aurora + ';vertical-align:top">' + flhaEsc_(hz) + '</td>' +
+               '<td style="padding:7px 10px;border:1px solid ' + FLHA_B.line + ';font-size:12.5px;color:' + FLHA_B.silver + '">' + flhaEsc_(mit || '—') + '</td></tr>';
+      }).join('') + '</table>') : '') +
     flhaSection_('Controls / mitigations  (eliminate -> substitute -> engineer -> admin -> PPE)', flhaChips_(r.controlsStr)) +
     flhaSection_('Job-specific hazards & what we did', '<div style="white-space:pre-wrap;border-left:2px solid ' + FLHA_B.aurora + ';padding-left:12px">' + flhaEsc_(r.jobHazards || '—') + '</div>') +
     flhaSection_('Pre-work checklist (equipment · pressure · site · containment)', flhaEquipGrid_(r.equipStr)) +
@@ -432,6 +447,7 @@ function flhaEmailHtml_(r, pdfUrl) {
       '</tr></table>' +
       '<p style="margin:6px 0"><span style="color:' + FLHA_B.aurora + '">Signed by (verified):</span> <b style="color:#fff">' + flhaEsc_(r.crewNames) + '</b></p>' +
       '<div style="margin-top:12px"><div style="font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:' + FLHA_B.aurora + ';margin-bottom:4px">Hazards</div>' + flhaChips_(r.hazardsStr) + '</div>' +
+      ((r.mitigations && r.mitigations.length) ? ('<div style="margin-top:12px"><div style="font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:' + FLHA_B.aurora + ';margin-bottom:4px">How each hazard was mitigated</div>' + r.mitigations.map(function (m) { return '<div style="font-size:13px;margin:3px 0"><span style="color:' + FLHA_B.lime + '">&#9670;</span> ' + flhaEsc_(m) + '</div>'; }).join('') + '</div>') : '') +
       '<div style="margin-top:12px"><div style="font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:' + FLHA_B.aurora + ';margin-bottom:4px">Controls</div>' + flhaChips_(r.controlsStr) + '</div>' +
       '<div style="margin-top:12px"><div style="font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:' + FLHA_B.aurora + ';margin-bottom:4px">Job-specific</div><div style="white-space:pre-wrap">' + flhaEsc_(r.jobHazards || '—') + '</div></div>' +
       ((r.photoLinks && r.photoLinks.length) ? ('<div style="margin-top:12px"><div style="font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:' + FLHA_B.aurora + ';margin-bottom:4px">Site photos</div>' + r.photoLinks.map(function (u, i) { return '<a href="' + flhaEsc_(u) + '" style="color:' + FLHA_B.lime + ';margin-right:12px">📷 Photo ' + (i + 1) + '</a>'; }).join('') + '</div>') : '') +
@@ -439,6 +455,166 @@ function flhaEmailHtml_(r, pdfUrl) {
       '<p style="margin:16px 0 0;font-size:11.5px;color:' + FLHA_B.dim + '">Record ' + flhaEsc_(r.id) + ' · logged to the 🦺 FLHA tab · signatures server-timestamped · PDF also attached.</p>' +
     '</div>' +
   '</div>';
+}
+
+/* ============================================================================
+ *  FLHA LIFECYCLE — the OHS Code s.7 "reassess when conditions change" duty:
+ *  a submitted FLHA stays OPEN through the shift. The crew can AMEND it (add
+ *  hazards / note changed conditions) at any time, and must CLOSE it out at
+ *  end of day with a fresh verified sign-off. Amendments + closeout live on
+ *  the same sheet row, and the closeout emails the owners a day summary.
+ * ==========================================================================*/
+
+/** Find a FLHA row by its FLHA ID. Returns {rowIndex, values} or null. */
+function flhaFindRow_(sh, id) {
+  var last = sh.getLastRow();
+  if (last < 2) return null;
+  var ids = sh.getRange(2, flhaCol_('FLHA ID'), last - 1, 1).getValues();
+  for (var i = ids.length - 1; i >= 0; i--) {
+    if (String(ids[i][0]) === String(id)) return { rowIndex: i + 2 };
+  }
+  return null;
+}
+
+/** List today's FLHAs that are still open (SUBMITTED — not CLOSED), newest first. */
+function apiFlhaToday(token) {
+  var user = (typeof checkToken_ === 'function') ? checkToken_(token) : null;
+  if (!user) return { ok: false, error: 'Session expired — please sign in again.' };
+  try {
+    var sh = flhaSheet_(false);
+    if (!sh) return { ok: true, items: [] };
+    var last = sh.getLastRow();
+    if (last < 2) return { ok: true, items: [] };
+    var n = Math.min(30, last - 1);
+    var vals = sh.getRange(last - n + 1, 1, n, FLHA_HEADERS.length).getValues();
+    var today = Utilities.formatDate(new Date(), SAFETY.TZ, 'yyyy-MM-dd');
+    var items = [];
+    for (var i = vals.length - 1; i >= 0; i--) {
+      var r = vals[i];
+      var dateStr = String(r[flhaCol_('Date') - 1] || '');
+      if (r[flhaCol_('Date') - 1] instanceof Date) dateStr = Utilities.formatDate(r[flhaCol_('Date') - 1], SAFETY.TZ, 'yyyy-MM-dd');
+      var status = String(r[flhaCol_('Status') - 1] || '');
+      if (dateStr === today && status === 'SUBMITTED') {
+        items.push({ id: String(r[flhaCol_('FLHA ID') - 1]), jobTask: String(r[flhaCol_('Job / Task') - 1] || ''),
+                     location: String(r[flhaCol_('Location') - 1] || ''), crew: String(r[flhaCol_('Crew Present') - 1] || ''),
+                     amendments: String(r[flhaCol_('Amendments (during shift)') - 1] || '') });
+      }
+    }
+    return { ok: true, items: items };
+  } catch (err) { return { ok: false, error: String(err) }; }
+}
+
+/**
+ * Amend today's FLHA — add a hazard / note changed conditions mid-shift.
+ * payload = { token, id, text, hazards:[..], photoLinks:[..] }
+ * Appends a timestamped, attributed line to the Amendments column (never edits history).
+ */
+function apiFlhaAmend(payload) {
+  var user = (typeof checkToken_ === 'function') ? checkToken_(payload && payload.token) : null;
+  if (!user) return { ok: false, error: 'Session expired — please sign in again.' };
+  var lock = LockService.getScriptLock();
+  try {
+    lock.waitLock(30000);
+    var text = String((payload && payload.text) || '').trim();
+    var hz = (payload && payload.hazards) || [];
+    if (text.length < 3 && !hz.length) return { ok: false, error: 'Describe what changed or pick the new hazard.' };
+    var sh = flhaSheet_(true);
+    var hit = flhaFindRow_(sh, payload.id);
+    if (!hit) return { ok: false, error: 'FLHA ' + (payload.id || '?') + ' not found.' };
+    var stamp = Utilities.formatDate(new Date(), SAFETY.TZ, 'HH:mm');
+    var photoLinks = [];
+    (payload.photoLinks || []).forEach(function (l) { if (/^https?:\/\//i.test(String(l))) photoLinks.push(String(l)); });
+    var line = '[' + stamp + ' ' + user.name + '] ' + (hz.length ? ('NEW HAZARD: ' + hz.join(', ') + (text ? ' — ' : '')) : '') + text +
+               (photoLinks.length ? (' (photos: ' + photoLinks.join(' ') + ')') : '');
+    var cell = sh.getRange(hit.rowIndex, flhaCol_('Amendments (during shift)'));
+    var cur = String(cell.getValue() || '');
+    cell.setValue(cur ? (cur + '\n' + line) : line);
+    // new hazards also join the Hazards Identified column so the record stays complete
+    if (hz.length) {
+      var hcell = sh.getRange(hit.rowIndex, flhaCol_('Hazards Identified'));
+      var hcur = String(hcell.getValue() || '');
+      hcell.setValue(hcur + (hcur ? ' · ' : '') + hz.join(' · ') + ' (added ' + stamp + ')');
+    }
+    try { appLog_('Safety', 'FLHA ' + payload.id + ' AMENDED by ' + user.name + ' @ ' + stamp + ': ' + line.slice(0, 140)); } catch (_) {}
+    return { ok: true, message: 'FLHA updated — change recorded at ' + stamp + '.' };
+  } catch (err) {
+    return { ok: false, error: String(err) };
+  } finally {
+    try { lock.releaseLock(); } catch (e2) {}
+  }
+}
+
+/**
+ * End-of-day closeout — every worker signs off again (own PIN), the FLHA is
+ * marked CLOSED, and the owners get a branded day-summary email.
+ * payload = { token, id, note, signatures:[{name,role,ts,sig}] }
+ */
+function apiFlhaCloseout(payload) {
+  return flhaCloseoutCore_(payload, { emailTo: SAFETY.EMAIL_TO, statusTag: '' });
+}
+
+function flhaCloseoutCore_(payload, opts) {
+  opts = opts || {};
+  var EMAIL_TO = opts.emailTo || SAFETY.EMAIL_TO;
+  var user = (typeof checkToken_ === 'function') ? checkToken_(payload && payload.token) : null;
+  if (!user) return { ok: false, error: 'Session expired — please sign in again.' };
+  var lock = LockService.getScriptLock();
+  try {
+    lock.waitLock(30000);
+    // verify closeout signatures exactly like the morning sign-off
+    var verified = [], seen = {};
+    ((payload && payload.signatures) || []).forEach(function (s) {
+      var v = flhaVerifySig_(s);
+      if (v && !seen[v.name.toLowerCase()]) { seen[v.name.toLowerCase()] = 1; verified.push(v); }
+    });
+    if (!verified.length) return { ok: false, error: 'End-of-day sign-off needs at least one verified worker signature.' };
+
+    var sh = flhaSheet_(true);
+    var hit = flhaFindRow_(sh, payload.id);
+    if (!hit) return { ok: false, error: 'FLHA ' + (payload.id || '?') + ' not found.' };
+
+    var row = sh.getRange(hit.rowIndex, 1, 1, FLHA_HEADERS.length).getValues()[0];
+    var note = String((payload && payload.note) || '').trim();
+    var stamp = Utilities.formatDate(new Date(), SAFETY.TZ, 'HH:mm');
+    var sigLines = verified.map(function (s) {
+      return s.name + (s.role ? ' (' + s.role + ')' : '') + ' — signed out ' + Utilities.formatDate(new Date(s.ts), SAFETY.TZ, 'HH:mm') + ' MT';
+    });
+    var closeText = (note ? ('Note: ' + note + '\n') : '') + sigLines.join('\n');
+    sh.getRange(hit.rowIndex, flhaCol_('End-of-Day Sign-off')).setValue(closeText);
+    sh.getRange(hit.rowIndex, flhaCol_('Status')).setValue(String(row[flhaCol_('Status') - 1]) === 'SELF-TEST' ? 'SELF-TEST' : 'CLOSED');
+
+    // branded closeout email — day summary incl. any amendments
+    var amendments = String(row[flhaCol_('Amendments (during shift)') - 1] || '');
+    var emailOk = false;
+    try {
+      var subj = (opts.statusTag || '') + 'FLHA closed out — ' + String(row[flhaCol_('Job / Task') - 1] || 'Job') + ' — ' + String(row[flhaCol_('Location') - 1] || '');
+      var html =
+        '<div style="background:' + FLHA_B.void + ';font-family:Arial,Helvetica,sans-serif;max-width:640px;margin:0 auto;border-radius:12px;overflow:hidden;border:1px solid ' + FLHA_B.line + '">' +
+          '<div style="padding:20px 24px;border-bottom:3px solid ' + FLHA_B.lime + '">' +
+            '<div style="color:' + FLHA_B.lime + ';font-size:12px;letter-spacing:.28em;font-weight:bold">EVOLVE ECO BLASTING · SAFETY</div>' +
+            '<div style="color:#fff;font-size:23px;font-weight:bold;margin-top:4px">FLHA CLOSED OUT &#10003;</div>' +
+            '<div style="color:' + FLHA_B.dim + ';font-size:13px;margin-top:3px">' + flhaEsc_(String(row[flhaCol_('Job / Task') - 1] || '')) + ' &middot; ' + flhaEsc_(String(row[flhaCol_('Location') - 1] || '')) + ' &middot; closed ' + stamp + ' MT</div>' +
+          '</div>' +
+          '<div style="padding:18px 24px;color:' + FLHA_B.silver + ';font-size:14px;line-height:1.6">' +
+            '<p style="margin:0 0 8px"><span style="color:' + FLHA_B.aurora + '">Signed out (verified):</span> <b style="color:#fff">' + flhaEsc_(verified.map(function (s) { return s.name; }).join(', ')) + '</b></p>' +
+            (note ? ('<div style="margin:10px 0;padding:12px 14px;background:rgba(255,255,255,.03);border-left:3px solid ' + FLHA_B.aurora + ';border-radius:6px;white-space:pre-wrap">' + flhaEsc_(note) + '</div>') : '<p style="margin:6px 0;color:' + FLHA_B.dim + '">No incidents or end-of-day notes reported.</p>') +
+            (amendments ? ('<div style="margin-top:12px"><div style="font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:' + FLHA_B.aurora + ';margin-bottom:4px">Changes during the shift</div><div style="white-space:pre-wrap;font-size:13px">' + flhaEsc_(amendments) + '</div></div>') : '') +
+            '<p style="margin:16px 0 0;font-size:11.5px;color:' + FLHA_B.dim + '">Record ' + flhaEsc_(String(payload.id)) + ' &middot; morning FLHA + amendments + this sign-out live on one row in the &#129666; FLHA tab.</p>' +
+          '</div>' +
+        '</div>';
+      var mail = sendEmail_({ to: EMAIL_TO, subject: subj, htmlBody: html,
+        body: 'FLHA ' + payload.id + ' closed out by ' + verified.map(function (s) { return s.name; }).join(', ') + (note ? ('. Note: ' + note) : '.') });
+      emailOk = !!(mail && mail.ok);
+    } catch (eM) { try { appLog_('Safety', 'FLHA closeout email failed ' + payload.id + ': ' + eM); } catch (_) {} }
+
+    try { appLog_('Safety', 'FLHA ' + payload.id + ' CLOSED OUT (' + verified.length + ' sign-out(s)), email ' + (emailOk ? 'sent' : 'FAILED') + '.'); } catch (_) {}
+    return { ok: true, id: payload.id, emailed: emailOk, signers: verified.map(function (s) { return s.name; }),
+             message: 'Day closed out and emailed to Todd & Matt. Good work today.' };
+  } catch (err) {
+    return { ok: false, error: String(err) };
+  } finally {
+    try { lock.releaseLock(); } catch (e2) {}
+  }
 }
 
 /* ----------------------------------------------------------------------------
@@ -452,10 +628,12 @@ function EV_flhaSelfTest_() {
   var users = readUserNames_ ? readUserNames_() : [];
   var who = (users && users.length) ? users[0] : 'Todd';   // any real, active user
   var ts = Date.now();
+  var token = makeToken_(who);
+  function sig() { var t = Date.now(); return { name: who, role: 'admin', ts: t, sig: sign_(who + '|' + t + '|flha') }; }
   var payload = {
-    token: makeToken_(who),
+    token: token,
     device: 'self-test/server',
-    signatures: [{ name: who, role: 'admin', ts: ts, sig: sign_(who + '|' + ts + '|flha') }],
+    signatures: [sig()],
     flha: {
       location: 'SELF-TEST — shop', date: Utilities.formatDate(new Date(), SAFETY.TZ, 'yyyy-MM-dd'),
       startTime: Utilities.formatDate(new Date(), SAFETY.TZ, 'HH:mm'),
@@ -466,12 +644,19 @@ function EV_flhaSelfTest_() {
       controlsNote: 'Automated self-test — verifies sheet + Drive + email wiring.',
       jobHazards: 'Self-test record — confirms the FLHA logs, stores a PDF and emails correctly.',
       equip: 'Whip checks on EVERY hose connection: Yes · O-rings checked / inspected: Yes · Compressor: air filters blown out: Yes · Blast radius secured: Yes · Abrasive media adequately contained: Yes · Water on site (hydration): Yes · SDS available (media & coatings): N/A',
-      ppe: ['Blast hood / supplied air', 'Hearing protection', 'Eye / face'],
+      ppe: ['Blast hood / supplied air', 'Double hearing protection (plugs + muffs)', 'Eye / face'],
       youngWorker: 'No', notes: 'Self-test note.',
+      mitigations: ['Respirable dust (silica-free media) — Silica-free media + dust control', 'Noise — Double hearing protection (plugs + muffs)', 'Compressed air / hose whip — Whip checks + deadman + valves off at startup'],
       emergency: { hospital: 'n/a (test)', muster: 'n/a', firstAid: 'n/a', contact: '911' }
     }
   };
-  return flhaSubmitCore_(payload, { emailTo: ['manager@yourcompany.com'], status: 'SELF-TEST' });
+  // exercise the FULL lifecycle: morning submit -> mid-shift amendment -> end-of-day closeout
+  var sub = flhaSubmitCore_(payload, { emailTo: ['manager@yourcompany.com'], status: 'SELF-TEST' });
+  if (!sub.ok) return { submit: sub };
+  var amend = apiFlhaAmend({ token: token, id: sub.id, text: 'Self-test amendment — wind picked up, added extra containment.', hazards: ['Wind / weather change'] });
+  var close = flhaCloseoutCore_({ token: token, id: sub.id, note: 'Self-test closeout — no incidents.', signatures: [sig()] },
+                                { emailTo: ['manager@yourcompany.com'], statusTag: '[SELF-TEST] ' });
+  return { submit: sub, amend: amend, closeout: close };
 }
 
 /* ============================================================================
