@@ -115,6 +115,9 @@ The newest pillar. A blasting crew works with respirable silica, compressed air,
 | **Capture** | One-tap logging of receipts, job photos, before/after, leads, customers, quotes, inventory, price logs, job actuals, feature requests, and free-form "quick capture." Offline outbox so nothing is ever lost. |
 | **Receipt OCR** | Two free OCR engines (Google Drive native, on-device Tesseract fallback) auto-fill vendor/date/total from a photo — no paid API. A robust money parser handles `$1,234.56`, European `1.234,56`, and space-grouped totals. |
 | **The Claude agent** | Reads the inbox on a schedule, files each item to the right tab/columns, builds and emails branded quotes, raises "you forgot to invoice this" alerts, and audits the workbook. |
+| **AI receipt pipeline** | A two-stage, cost-tiered flow ([`receipt-pipeline.md`](receipt-pipeline.md)): a small model does the cheap extraction pass, a mid-tier model does the reasoning (category, job match, dedupe) — one compact `receiptContext` fetch in, one `fileReceipt` writeback per receipt out. The server's dedupe + financial gate still apply to everything the AI files. |
+| **Quote learning loop** | A `📈 Quote Learning` tab accumulates every quote's inputs (sq ft, blast depth, $/sq ft) and outcome (won/lost/open) with win-rate stats — so pricing gets smarter as quotes pile up. |
+| **System health report** | A `🩺 System Health` tab: live metrics (inbox backlog, receipts, safety records, triggers) plus honest doing-well / needs-attention / recommendations sections. Refresh on demand — never edited by hand. |
 | **Server-side autonomy** | Morning digest, money-loop sweeps (3×/day), email-reply → to-do capture, a daily spend-insight engine, and a 3-day workbook backup — all on Google triggers, PC or no PC. |
 | **🦺 Safety** | FLHA with verified multi-worker sign-off + branded PDF; one-tap hazard escalation to management. |
 | **Financial safety gate** | Ambiguous or unreadable receipt totals are *held out* of Expenses/P&L until a human confirms — a wrong number never silently enters the books. |
@@ -162,6 +165,8 @@ Intelligence.gs       GST separation, Job P&L, cross-tab insights, price watch, 
 DriveIntake.gs        Hourly OCR of loose Drive receipts → inbox → filer
 ReceiptOps.gs         Receipt Log, router-health watch, discrepancy report
 Backups.gs            3-day full-workbook backups into a protected folder
+Overnight.gs          Ops module: OCR self-test, AI receipt-pipeline endpoints, quote learning, system health, system log
+receipt-pipeline.md   The two-stage (cheap-extract → reason) receipt ingestion playbook
 DigestV2/V3.gs        Morning-digest builders
 OcrFill.gs            Free in-app receipt OCR (Drive + Tesseract)
 appsscript.json       Manifest (scopes, web-app config)
