@@ -731,7 +731,7 @@ function hazardEmailHtml_(r) {
   '</div>';
 }
 
-/** Self-test the hazard escalation pipeline (emails the manager only, STATUS=SELF-TEST). */
+/** Self-test the hazard escalation pipeline (emails manager only, STATUS=SELF-TEST). */
 function EV_hazardSelfTest_() {
   var users = readUserNames_ ? readUserNames_() : [];
   var who = (users && users.length) ? users[0] : 'Todd';

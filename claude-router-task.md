@@ -40,6 +40,7 @@ Use `-L` â€” the /exec URL 302-redirects.)
 | `setCell` | `{secret,action,tab,a1,value}` | sets one cell (for matrix/inventory tabs) |
 | `markInbox` | `{secret,action,id,status,filedTo,notes}` | update an Inbox rowâ€™s Status/Filed To/Notes |
 | `log` | `{secret,action,message}` | appends to the ðŸ—’ App Log |
+| `maint` | `{secret,action,fn}` | whitelisted maintenance/diagnostics. Useful `fn` values: `fileInboxNow` (run the inbox filer now), `reconcileReceipts` (report Expenses rows with no matching Receipt Log entry), `checkCategory` (dry-run the spend-category gate against a details object), `listTriggers`, `setupSafety`, `flhaSelfTest`, `hazardSelfTest` |
 
 **Value coercion in `values[]`:** a string `"DATE:2026-06-08"` is written as a real Date;
 `"NUM:1234.5"` as a Number; anything else is written verbatim (so currency-as-text tabs

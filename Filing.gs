@@ -229,14 +229,10 @@ function EV_isDupReceipt_(book, det, sub){
     var lastRow=rl.getLastRow(); if(lastRow<2) return false;
     var v=rl.getRange(2,1,lastRow-1,12).getValues(); // Date,Vendor,Category,Subtotal,GST,Total,...,Source(12)
     var key=EV_norm_(det.vendor||det.where||det.store||'');
-    // FIX (2026-07-08, re-applied 2026-07-11): dedupe reads the total from the SAME source the booker
-    // uses (EV_findAmount_ → total/amount/amountDue/…) so a receipt whose amount lives in a
-    // non-"total" field is still matched and never double-filed.
-    var tot=(typeof EV_findAmount_==='function')?EV_findAmount_(det):EV_amount_(det.total);
-    if(tot==='') tot=NaN;
+    var tot=EV_amount_(det.total);
     var d=EV_toDate_(det.date);
     for(var i=0;i<v.length;i++){
-      if(sub && String(v[i][11])===String(sub)) continue;   // never dup against this submission's own row
+      if(sub && EV_srcHasSub_(v[i][11], sub)) continue;   // never dup against this submission's own row
       if(EV_norm_(v[i][1])!==key) continue;
       var t2=EV_amount_(v[i][5]);
       if(isNaN(tot)||isNaN(t2)||Math.abs(tot-t2)>0.5) continue;
@@ -299,7 +295,10 @@ function EV_rebuildVendors_(book){
   rows.forEach(function(e){
     if(!e.vendor) return;
     var canon=EV_vendorCanon_(e.vendor), k=EV_norm_(canon); if(!k) return;
-    if(!map[k]) map[k]={raw:e.vendor, canon:canon, cat:e.category||'', first:e.date, total:0};
+    // Same guard as the Receipt Log backfill: this routine CLEARS and rewrites the whole
+    // Vendors region, so an unfiltered junk category would be re-stamped as that vendor's
+    // canonical category on every rebuild.
+    if(!map[k]) map[k]={raw:e.vendor, canon:canon, cat:EV_cleanExistingCat_(e.category||'', book), first:e.date, total:0};
     map[k].total+=(e.amount||0);
     if(e.date instanceof Date && (!(map[k].first instanceof Date) || e.date.getTime()<map[k].first.getTime())) map[k].first=e.date;
   });
@@ -313,8 +312,12 @@ function EV_backfillReceiptLog_(book){
   book=book||SpreadsheetApp.openById(EV_FILER_SS_ID);
   var rl=EV_sheetEndingWith_(book,'Receipt Log'), exp=EV_sheetEndingWith_(book,'Expenses');
   if(!rl||!exp) return 0;
-  var rlData=rl.getDataRange().getValues(), seen={};
-  for(var i=1;i<rlData.length;i++){ var s=String(rlData[i][11]||''); if(s) seen[s]=true; }
+  // Collect Source cells verbatim; match with EV_srcHasSub_ rather than an exact key lookup,
+  // because a mirrored row's Source now reads "SUB-… — MIRRORS Expenses row N (do NOT sum both tabs)".
+  // An exact lookup here would miss those and backfill a SECOND copy of every mirrored receipt.
+  var rlData=rl.getDataRange().getValues(), srcCells=[];
+  for(var i=1;i<rlData.length;i++){ var s=String(rlData[i][11]||''); if(s) srcCells.push(s); }
+  function seenSub(sb){ for(var q=0;q<srcCells.length;q++){ if(EV_srcHasSub_(srcCells[q], sb)) return true; } return false; }
   var ev=exp.getDataRange().getValues(), hr=-1, header=null;
   for(var r=0;r<Math.min(15,ev.length);r++){ var low=ev[r].map(function(x){return String(x).toLowerCase();}).join('|'); if(low.indexOf('vendor')>=0&&low.indexOf('total')>=0){ hr=r; header=ev[r]; break; } }
   if(hr<0) return 0;
@@ -323,10 +326,13 @@ function EV_backfillReceiptLog_(book){
   for(var rr=hr+1;rr<ev.length;rr++){
     var desc=String((ciDesc>=0?ev[rr][ciDesc]:'')||''), m=desc.match(/SubID:\s*(\S+)/), sub=m?m[1]:'';
     var vendor=String((ciVendor>=0?ev[rr][ciVendor]:'')||''), total=ciTotal>=0?ev[rr][ciTotal]:'';
-    if(!sub || seen[sub]) continue;
+    if(!sub || seenSub(sub)) continue;
     var pm=desc.match(/Photo:\s*([^|]+)/), photo=pm?pm[1].trim():'';
-    rl.appendRow([ (ciDate>=0?ev[rr][ciDate]:'')||'', vendor, (ciCat>=0?ev[rr][ciCat]:'')||'', '', '', total||'', '', (ciWhat>=0?ev[rr][ciWhat]:'')||'', '', '', '', sub, photo, (ciBy>=0?ev[rr][ciBy]:'')||'', 'Backfilled from Expenses — GST/subtotal unverified', EV_fmtNow_() ]);
-    seen[sub]=true; added++;
+    // Don't launder a junk Expenses category into the Receipt Log too — a value that isn't a
+    // real category becomes 'Uncategorized' here. The Expenses row itself is left untouched.
+    var _bfCat = EV_cleanExistingCat_((ciCat>=0?ev[rr][ciCat]:'')||'', book);
+    rl.appendRow([ (ciDate>=0?ev[rr][ciDate]:'')||'', vendor, _bfCat, '', '', total||'', '', (ciWhat>=0?ev[rr][ciWhat]:'')||'', '', '', '', sub, photo, (ciBy>=0?ev[rr][ciBy]:'')||'', 'Backfilled from Expenses — GST/subtotal unverified', EV_fmtNow_() ]);
+    srcCells.push(sub); added++;
   }
   return added;
 }

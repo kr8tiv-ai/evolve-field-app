@@ -1,7 +1,12 @@
 # ── Secrets & deploy config — NEVER commit ─────────────────────────────
-.clasp.json                 # contains the private Apps Script scriptId
+# NOTE: .gitignore has NO inline comments. A trailing "# ..." becomes part of
+# the pattern, so every rule below keeps its comment on its own line.
+
+# contains the private Apps Script scriptId
+.clasp.json
 .clasprc.json
-deploy-local/               # generated copies with real IDs filled in
+# generated copies with the real IDs filled in
+deploy-local/
 *.local
 *.secret
 .env
@@ -11,8 +16,12 @@ router-url.txt
 *-secret*.txt
 
 # ── Local build / preview artifacts ────────────────────────────────────
-_*.html                     # local PDF/email preview renders
-_*.md                       # local audit/research notes
+# local PDF/email preview renders
+_*.html
+# local audit/research notes
+_*.md
+# local sync tooling — _sanitize.js holds the real→placeholder map
+_*.js
 *_preview.*
 
 # ── OS / editor ────────────────────────────────────────────────────────

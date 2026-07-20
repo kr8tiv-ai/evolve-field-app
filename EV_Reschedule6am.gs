@@ -27,10 +27,6 @@ function EV_maintAction_(body) {
     case 'snapshotTriggers': return { ok: true, fn: fn, result: EV_snapshotTriggers_() };
     case 'fixTriggers':    return { ok: true, fn: fn, result: EV_fixTriggers_() };
     case 'runDigest':      return { ok: true, fn: fn, result: EV_morningDigest() };
-    // Safety/FLHA maint hooks (restored 2026-07-11 — were lost in a stale-copy push; keep alongside the digest cases)
-    case 'setupSafety':    return { ok: true, fn: fn, result: (typeof setupSafety === 'function') ? setupSafety() : 'setupSafety missing' };
-    case 'flhaSelfTest':   return { ok: true, fn: fn, result: (typeof EV_flhaSelfTest_ === 'function') ? EV_flhaSelfTest_() : 'EV_flhaSelfTest_ missing' };
-    case 'hazardSelfTest': return { ok: true, fn: fn, result: (typeof EV_hazardSelfTest_ === 'function') ? EV_hazardSelfTest_() : 'EV_hazardSelfTest_ missing' };
     case 'writeStartHere': return { ok: true, fn: fn, result: EV_writeStartHere() };
     case 'writeQandA':     return { ok: true, fn: fn, result: EV_writeQandA() };
     case 'writeHours':     return { ok: true, fn: fn, result: EV_writeHours() };
@@ -41,6 +37,13 @@ function EV_maintAction_(body) {
     case 'digestDiag':     return { ok: true, fn: fn, result: EV_digestDiag_() };
     case 'sendCopy':       return { ok: true, fn: fn, result: EV_sendDigestCopy_(body.to) };
     case 'sysDiag':        return { ok: true, fn: fn, result: EV_sysDiag_() };
+    case 'setupSafety':    return { ok: true, fn: fn, result: (typeof setupSafety === 'function') ? setupSafety() : 'setupSafety missing' };
+    case 'flhaSelfTest':   return { ok: true, fn: fn, result: (typeof EV_flhaSelfTest_ === 'function') ? EV_flhaSelfTest_() : 'EV_flhaSelfTest_ missing' };
+    case 'hazardSelfTest': return { ok: true, fn: fn, result: (typeof EV_hazardSelfTest_ === 'function') ? EV_hazardSelfTest_() : 'EV_hazardSelfTest_ missing' };
+    case 'fileInboxNow':   return { ok: true, fn: fn, result: EV_fileInbox_() };
+    case 'reconcileReceipts': return { ok: true, fn: fn, result: EV_reconcileReceipts() };
+    case 'checkCategory':  return { ok: true, fn: fn, result: EV_normalizeCategory_(body.details||{}, body.summary||'', body.vendor||'') };
+    case 'writeSystemLog': return { ok: true, fn: fn, result: EV_writeSystemLog_() };
     case 'testDigestSend': return { ok: true, fn: fn, result: EV_sendTestDigest_(body.to) };
     case 'renderV2':       return { ok: true, fn: fn, result: (function(){ try { return EV_buildMorningDigestHtml_(); } catch(e){ return 'V2 ERROR: '+e; } })() };
     case 'renderV3direct': return { ok: true, fn: fn, result: (function(){ try { return EV_buildDigestV3_(); } catch(e){ return 'V3 THREW: '+e; } })() };

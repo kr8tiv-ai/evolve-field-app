@@ -72,10 +72,7 @@ function EV_normNums_(s) {
  *  signs and parentheses are preserved (refunds read as negative). */
 function EV_amounts_(s, moneyOnly) {
   var str = EV_normNums_(s), out = [], m;
-  // FIX (2026-07-08, re-applied 2026-07-11 after a stale-copy push reverted it): integer body allows
-  // '.' grouping so a EU-format total like "1.234,56" is ONE token (was split into 1.23 + 4.56 →
-  // booked $4.56). EV_amount_ resolves separators. Verified: all NA formats unchanged (0 regressions).
-  var re = /(\()?\s*(\$)?\s*(-?\d[\d.,]*\d|-?\d)\s*(\))?/g;
+  var re = /(\()?\s*(\$)?\s*(-?\d[\d,]*(?:[.,]\d{1,2})?)\s*(\))?/g;
   while ((m = re.exec(str)) !== null) {
     if (!m[3]) continue;
     var paren = m[1] && m[4], hasDollar = !!m[2], tok = m[3];
@@ -248,9 +245,10 @@ function EV_upsertReceiptLog_(book, sub, rowValues) {
     if (sub) {
       var lr = rl.getLastRow();
       if (lr >= 2) {
-        var src = rl.getRange(2, 12, lr - 1, 1).getValues(); // col 12 = Source (Inbox ID)
+        var src = rl.getRange(2, 12, lr - 1, 1).getValues(); // col 12 = Source (Inbox ID [+ cross-ref note])
         for (var i = 0; i < src.length; i++) {
-          if (String(src[i][0]) === String(sub)) { rl.getRange(i + 2, 1, 1, rowValues.length).setValues([rowValues]); return true; }
+          // Boundary-safe, not ===: the Source cell now carries a "MIRRORS Expenses row N" suffix.
+          if (EV_srcHasSub_(src[i][0], sub)) { rl.getRange(i + 2, 1, 1, rowValues.length).setValues([rowValues]); return true; }
         }
       }
     }

@@ -789,7 +789,7 @@ function EV_addToDo_(text, from) {
     var nums = EV_todoItems_().map(function (t) { return +t.num; });
     var next = (nums.length ? Math.max.apply(null, nums) : 0) + 1;
     var who = (from || '').replace(/.*</, '').replace(/>.*/, '') || from;
-    sh.appendRow([String(next), text, 'Inbox / Reply', 'Medium', 'To Do', EV_fmt_(EV_now_(), 'yyyy-MM-dd'), '', 'Added automatically from an email reply (' + who + ')']);
+    sh.appendRow([String(next), text, 'Inbox / Reply', 'Medium', 'To Do', EV_fmt_(EV_now_(), 'MM/dd/yyyy'), '', 'Added automatically from an email reply (' + who + ')']);
     appLog_('Autopilot', 'To-Do +1 from reply: ' + text.slice(0, 80));
     return true;
   } catch (e) { return false; }
@@ -802,7 +802,7 @@ function EV_addToDoCat_(text, from, category, priority) {
     var nums = EV_todoItems_().map(function (t) { return +t.num; });
     var next = (nums.length ? Math.max.apply(null, nums) : 0) + 1;
     var who = (from || '').replace(/.*</, '').replace(/>.*/, '') || from;
-    sh.appendRow([String(next), text, category || 'Inbox / Reply', priority || 'Medium', 'To Do', EV_fmt_(EV_now_(), 'yyyy-MM-dd'), '', 'From an email reply (' + who + ')']);
+    sh.appendRow([String(next), text, category || 'Inbox / Reply', priority || 'Medium', 'To Do', EV_fmt_(EV_now_(), 'MM/dd/yyyy'), '', 'From an email reply (' + who + ')']);
     appLog_('Autopilot', 'To-Do +1 [' + (category || 'Reply') + '] from reply: ' + String(text).slice(0, 80));
     return true;
   } catch (e) { return false; }
@@ -1135,16 +1135,22 @@ function EV_fileExpense_(book, irow, ih, details, photo, sub){
   // FINANCIAL GATE (A-2): if the total is missing, zero, implausible, or fails the subtotal+GST
   // check, HOLD the receipt OUT of Expenses/P&L. Record it once in the Receipt Log with the issue
   // (so the 3-day report surfaces it) and leave the inbox NEEDS REVIEW. A wrong number never books.
+  // Spend category gate (2026-07-19): validate against the controlled list BEFORE any write.
+  // details.about is deliberately not consulted here — it is a routing hint, and reading it is
+  // what put the literal strings "receipt"/"quick" on the spend donut. See Validate.js.
+  var _catRes = EV_normalizeCategory_(details, summary, details.vendor||details.where||details.store||'', book);
+  var _cat = _catRes.value;
+
   var _fin = EV_receiptFinancialIssue_(details);
   if (_fin) {
     // Record (upsert by Submission ID) a HELD row in the Receipt Log so the issue is visible, but keep
     // it OUT of Expenses/P&L. When the receipt is later corrected, the booking path upserts the SAME
     // row to the correct values — the ledger never ends up with a stale wrong row.
     EV_upsertReceiptLog_(book, sub, [ _useDate, EV_safeCell_(details.vendor||details.where||details.store||''),
-      EV_safeCell_(details.category||details.about||'Field App'), '', EV_safeCell_(details.gst||details.tax||''),
+      EV_safeCell_(_cat), '', EV_safeCell_(details.gst||details.tax||''),
       EV_safeCell_(details.total||''), '', EV_safeCell_(details.item||details.what||summary||''), '', '', '',
       sub, EV_safeCell_(EV_cleanLink_(String(photo||'').split('\n')[0])), EV_safeCell_(by||''),
-      'HELD — '+_fin+(_dateFlag?(' · '+_dateFlag):''), EV_fmtNow_() ]);
+      'HELD — '+_fin+(_dateFlag?(' · '+_dateFlag):'')+(_catRes.note?(' · '+_catRes.note):''), EV_fmtNow_() ]);
     try { appLog_('Receipt','Receipt HELD out of Expenses ('+(details.vendor||'?')+' $'+(details.total||'?')+'): '+_fin); } catch(_e){}
     return null; // -> inbox stays NEEDS REVIEW (surfaced by sweep/digest); no wrong number on the books
   }
@@ -1187,7 +1193,7 @@ function EV_fileExpense_(book, irow, ih, details, photo, sub){
   put('What was purchased', details.item||details.what||details.purchased||summary||'');
   put('Vendor', details.vendor||details.where||details.store||'');
   put('Why', details.job||details.reference||details.why||_jobId||details.notes||'');
-  put('Category', details.category||details.about||'Field App');
+  put('Category', _cat);
   put('Qty', details.qty||details.quantity||'');
   put('Unit cost', details.unit||details.unitCost||'');
   put('Total', EV_findAmount_(details));
@@ -1198,6 +1204,7 @@ function EV_fileExpense_(book, irow, ih, details, photo, sub){
   // (idempotent on the Submission ID). Best-effort — never blocks the Expenses write above.
   var _issue=''; try { _issue=EV_verifyReceipt_(details); } catch(_v){}
   if(_dateFlag) _issue=(_issue?(_issue+'; '):'')+_dateFlag;
+  if(_catRes.note) _issue=(_issue?(_issue+'; '):'')+_catRes.note;
   var _total=EV_findAmount_(details);
   // Separate GST on EVERY receipt: use typed/OCR'd subtotal+GST if present, else back-compute at the
   // Alberta 5% rate (flagged estimated) so the Receipt Log is QuickBooks/tax-ready, never blank.
@@ -1205,10 +1212,14 @@ function EV_fileExpense_(book, irow, ih, details, photo, sub){
   var _sub = _g ? _g.subtotal : '';
   var _gstVal = _g ? _g.gst : EV_safeCell_(details.gst||details.tax||'');
   if (_g && _g.estimated) _issue = (_issue?(_issue+'; '):'') + 'GST estimated (5% incl.)';
-  EV_upsertReceiptLog_(book, sub, [
+  // Cross-reference note (ops convention): this Receipt Log row MIRRORS the Expenses row above —
+  // the two tabs are the same money seen twice, so a report must never add them together.
+  // EV_srcHasSub_ keeps the upsert idempotent despite the suffix.
+  var _srcCell = sub + ' — MIRRORS Expenses row ' + target + ' (do NOT sum both tabs)';
+  var _mirrored = EV_upsertReceiptLog_(book, sub, [
     _useDate,                                                                  // Date (printed receipt date)
     EV_safeCell_(details.vendor||details.where||details.store||''),            // Vendor
-    EV_safeCell_(details.category||details.about||'Field App'),                // Category
+    EV_safeCell_(_cat),                                                        // Category (validated — Validate.js)
     _sub,                                                                      // Subtotal (Total − GST, separated/estimated)
     _gstVal,                                                                   // GST/Tax (separated/estimated)
     _total,                                                                    // Total
@@ -1217,12 +1228,27 @@ function EV_fileExpense_(book, irow, ih, details, photo, sub){
     EV_safeCell_(details.qty||details.quantity||''),                           // Qty
     EV_safeCell_(details.unit||details.unitCost||''),                          // Unit price
     EV_safeCell_(_jobId||details.job||details.reference||details.why||details.notes||''), // Job/reason (Job ID link)
-    sub,                                                                       // Source (Inbox ID)
+    EV_safeCell_(_srcCell),                                                    // Source (Inbox ID + cross-ref)
     EV_safeCell_(EV_cleanLink_(String(photo||'').split('\n')[0])),             // Photo link (first, de-tagged)
     EV_safeCell_(by||''),                                                      // Filed by
     EV_safeCell_(_issue),                                                      // Issue/discrepancy
     EV_fmtNow_()                                                               // Created
   ]);
+
+  // The mirror used to fail SILENTLY: Expenses got the row, the Receipt Log did not, the inbox
+  // still said FILED, and job costing quietly under-counted (two Warburg receipts, 2026-07-18).
+  // A failed mirror is now loud — logged, and stamped on the Expenses row a human reads.
+  if (_mirrored !== true) {
+    try { appLog_('Receipt', 'MIRROR FAILED — ' + sub + ' booked to ' + exp.getName() + ' row ' + target +
+      ' but did NOT reach the Receipt Log. Job costing will under-count until this is filed.'); } catch(_lm){}
+    try {
+      var _dc = gi('Description');
+      if (_dc >= 0) {
+        exp.getRange(target, _dc+1).setValue(String(exp.getRange(target, _dc+1).getValue()||'') +
+          ' | ⚠ NOT MIRRORED TO RECEIPT LOG — job costing incomplete, file manually');
+      }
+    } catch(_dm){}
+  }
 
   // Canonical vendor roll-up — populates the Vendors tab + de-typos the spend brain.
   try { EV_upsertVendor_(book, details.vendor||details.where||details.store||'', details.category||details.about||'', _total, EV_toDate_(irow[0])); } catch(_uv){}
@@ -1298,14 +1324,34 @@ function EV_toDate_(v){
   if (typeof v === "number") return new Date(v);
   var s = String(v||"").trim();
   if (!s) return '';
+  // ---- DATE-ONLY VALUES ARE ANCHORED AT NOON. WHY: -------------------------------------
+  // A bookkeeping date has no time, but a JS Date is an instant, so it only reads back as the
+  // same calendar day if the writer's and reader's timezones agree. Here they do NOT:
+  //   * new Date("2026-07-18") is parsed by spec as UTC midnight  -> Jul 17 17:00 in a UTC-7 book
+  //   * new Date(2026,6,18)    is midnight in the SCRIPT tz (Edmonton, UTC-6 in summer),
+  //     but this workbook renders in UTC-7                        -> Jul 17 23:00
+  // Both booked a Jul-18 receipt into Jul 17. Anchoring date-only values at 12:00 keeps the
+  // calendar day stable against any writer/reader skew up to ±11h, so it cannot drift again
+  // if either timezone is changed. Values that carry a real time are left exactly as given.
+  var iso = s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
+  if (iso) return new Date(Number(iso[1]), Number(iso[2])-1, Number(iso[3]), 12, 0, 0);
   var parts = s.split(" ");
   var dmy = (parts[0]||"").split("/");
   if (dmy.length === 3 && dmy[2].length === 4) {
-    var hms = (parts[1]||"0:0:0").split(":");
-    return new Date(Number(dmy[2]), Number(dmy[1])-1, Number(dmy[0]), Number(hms[0]||0), Number(hms[1]||0), Number(hms[2]||0));
+    var hasTime = !!parts[1];
+    var hms = (parts[1]||"12:0:0").split(":");   // no time given -> noon, same reasoning as above
+    return new Date(Number(dmy[2]), Number(dmy[1])-1, Number(dmy[0]),
+                    Number(hms[0]||(hasTime?0:12)), Number(hms[1]||0), Number(hms[2]||0));
   }
   var d = new Date(s);
-  return isNaN(d.getTime()) ? '' : d;  // blank, never a fabricated "today", for the tax ledger
+  if (isNaN(d.getTime())) return '';   // blank, never a fabricated "today", for the tax ledger
+  // A bare date-only string that only the native parser understood (e.g. "Jul 18, 2026") is UTC
+  // midnight for ISO-like forms; re-anchor to local noon on the calendar day the parser saw.
+  if (!/\d:\d/.test(s)) {
+    var probe = /^\d{4}-\d{1,2}-\d{1,2}/.test(s) ? new Date(d.getTime() + 12*3600000) : d;
+    return new Date(probe.getFullYear(), probe.getMonth(), probe.getDate(), 12, 0, 0);
+  }
+  return d;
 }
 
 
@@ -1353,9 +1399,7 @@ function EV_brainExpenses_(book){
     if(notes.indexOf("seed row")>=0||notes.indexOf("baseline market")>=0||notes.indexOf("auto from price log")>=0) continue;
     if(vendor.toLowerCase().indexOf("test")>=0) continue;
     if(!vendor) continue; // skip footer/total + blank rows
-    // FIX (2026-07-08, re-applied 2026-07-11): Number("1,234.56") is NaN → row silently dropped
-    // from the spend brain. EV_amount_ parses comma/EU totals correctly.
-    var amt=(typeof EV_amount_==='function')?EV_amount_(row[cT]):Number(row[cT]); if(isNaN(amt)||amt===0) continue;
+    var amt=Number(row[cT]); if(isNaN(amt)||amt===0) continue;
     var dt=row[cD]; if(!(dt instanceof Date)){ try{ dt=EV_toDate_(dt); }catch(e){ dt=null; } }
     out.push({date:dt,vendor:vendor,category:String(row[cC]||"Uncategorized").trim(),amount:amt,what:String(row[cW]||"")});
   }

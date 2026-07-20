@@ -140,6 +140,18 @@ This is a real app with an auth system and user logins, so security is a first-c
 
 The books are only worth what they're accurate to. The codebase includes a hardening layer with a unit-tested money parser, a financial gate that quarantines untrustworthy totals, receipt de-duplication keyed on a submission ID, and canonical vendor merging. The system is periodically audited end-to-end (parsing, filing paths, trigger hygiene, duplicate detection) and fixes are verified against a regression battery before deploy.
 
+### The intake validation layer (`Validate.gs`)
+
+Everything above protects the *numbers*. `Validate.gs` protects the *fields around them* — the class of bug where the app writes something structurally valid but semantically wrong, and nobody notices until it distorts a report.
+
+**Nothing reaches a typed column unless it validates.** The spend category is gated against a controlled list (sourced live from the workbook's `Lists!ExpCat`, unioned with the categories the business actually uses). A value that isn't a real category is never written: the system first attempts a high-confidence inference from the vendor and line items, and if that fails it writes an explicit `Uncategorized` **plus a human-readable note in the Issue/discrepancy column**. It fails loudly rather than plausibly.
+
+This exists because of a real incident. The Drive-intake path set `about` to its *classifier verdict* (`receipt`, `quick`, `label`…) and the expense filer read `details.category || details.about || 'Field App'` — so the literal strings `receipt` and `quick` became the largest slice of the spend dashboard. A routing hint is not a category, and `Validate.gs` no longer lets one be mistaken for the other. The same guard is applied to the Receipt Log backfill and the Vendors rebuild, so historical junk can't be laundered into a second tab (the Vendors rebuild clears and rewrites its whole region, which would otherwise re-stamp bad values on every run).
+
+**Dates are anchored at noon.** A bookkeeping date has no time, but a JS `Date` is an instant — so it only reads back as the same calendar day if the writer's and reader's timezones agree. Two separate bugs came from that: ISO date-only strings (`"2026-07-18"`) parse as **UTC** midnight, and even a locally-built midnight is midnight in the *script's* timezone, which need not match the *spreadsheet's*. Both booked receipts a day early. Date-only values are now anchored at 12:00, which holds against any writer/reader skew up to ±11 hours.
+
+**The Expenses ↔ Receipt Log mirror can't fail silently.** Every app-filed receipt lands in both tabs; the Receipt Log row records its origin as `SUB-… — MIRRORS Expenses row N (do NOT sum both tabs)` so the two views can never be double-counted in a report. If the mirror fails, it is logged *and* stamped onto the Expenses row a human reads, instead of quietly starving job costing. `EV_reconcileReceipts()` is a standing read-only safety net that reports any app-filed expense with no matching Receipt Log entry.
+
 ---
 
 ## Tech stack
@@ -161,6 +173,7 @@ AutoServer.gs         Server-side autonomy: morning digest, sweeps, reply monito
 Safety.gs             FLHA + hazard escalation: verified sign-off, branded PDF, sheet + Drive + email
 Filing.gs             Deterministic inbox→tab routing and per-category filers
 Hardening.gs          Money parser, financial gate, idempotency, receipt-log upsert (unit-tested)
+Validate.gs           Intake validation: controlled-list spend categories, junk rejection, reconciliation net
 Intelligence.gs       GST separation, Job P&L, cross-tab insights, price watch, data-quality sweep
 DriveIntake.gs        Hourly OCR of loose Drive receipts → inbox → filer
 ReceiptOps.gs         Receipt Log, router-health watch, discrepancy report

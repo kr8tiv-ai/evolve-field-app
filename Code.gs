@@ -1,6 +1,6 @@
-/**
+﻿/**
  * ============================================================================
- *  EVOLVE FIELD APP  —  Google Apps Script backend
+ *  EVOLVE FIELD APP  â€”  Google Apps Script backend
  *  Evolve Eco Surface Prep & Restoration / Evolve Eco Blasting
  * ----------------------------------------------------------------------------
  *  WHAT THIS IS
@@ -10,18 +10,18 @@
  *
  *  SAFETY-FIRST DESIGN
  *    The app NEVER writes directly into the live financial tabs (Quotes, P&L,
- *    Dispatch, etc.) — those have banners, legends, matrix layouts and
+ *    Dispatch, etc.) â€” those have banners, legends, matrix layouts and
  *    scorecards that are easy to corrupt. Instead every submission lands as one
- *    clean row in a dedicated "📥 App Inbox" tab, and photos go to Drive.
+ *    clean row in a dedicated "ðŸ“¥ App Inbox" tab, and photos go to Drive.
  *
  *    Claude (running on a schedule via Cowork / your CLI) then reads the Inbox,
  *    files each entry into the correct tab, and audits the workbook. See
  *    DEPLOY.md + claude-router-task.md.
  *
  *  SETUP
- *    Run setup() once from the editor (Run ▸ setup). It creates the
+ *    Run setup() once from the editor (Run â–¸ setup). It creates the
  *    App Inbox + App Users tabs and seeds an admin login. Then deploy as a
- *    Web App (Deploy ▸ New deployment ▸ Web app).
+ *    Web App (Deploy â–¸ New deployment â–¸ Web app).
  * ============================================================================
  */
 
@@ -31,8 +31,8 @@
 const CONFIG = {
   SPREADSHEET_ID: 'YOUR_SPREADSHEET_ID',
 
-  INBOX_SHEET:  '📥 App Inbox',
-  USERS_SHEET:  '👥 App Users',
+  INBOX_SHEET:  'ðŸ“¥ App Inbox',
+  USERS_SHEET:  'ðŸ‘¥ App Users',
   LISTS_SHEET:  'Lists',
 
   // Google Drive folders (root: Evolve Eco Blasting)
@@ -103,7 +103,7 @@ function setup() {
     users.getRange(1, 1, 1, USERS_HEADERS.length).setValues([USERS_HEADERS]);
     styleHeaderRow_(users, USERS_HEADERS.length);
     users.setFrozenRows(1);
-    // Seed two admins — CHANGE THESE PINS after first login.
+    // Seed two admins â€” CHANGE THESE PINS after first login.
     users.getRange(2, 1, 2, USERS_HEADERS.length).setValues([
       ['Todd', '0000', 'admin', 'Yes', new Date()],
       ['Matt', '0000', 'admin', 'Yes', new Date()]
@@ -111,9 +111,9 @@ function setup() {
   }
 
   // --- App Log (Claude's audit trail) ---
-  let log = ss.getSheetByName('🗒 App Log');
+  let log = ss.getSheetByName('ðŸ—’ App Log');
   if (!log) {
-    log = ss.insertSheet('🗒 App Log');
+    log = ss.insertSheet('ðŸ—’ App Log');
     log.getRange(1, 1, 1, 3).setValues([['Timestamp', 'Source', 'Message']]);
     styleHeaderRow_(log, 3);
     log.setFrozenRows(1);
@@ -130,15 +130,15 @@ function setup() {
 
   SpreadsheetApp.flush();
   var _pf = (typeof EV_preflight_ === 'function') ? EV_preflight_() : [];
-  var _warn = _pf.length ? ('\n\n⚠ CONFIG NOT COMPLETE — fill these before installing triggers (installers will refuse):\n - ' + _pf.join('\n - ')) : '';
+  var _warn = _pf.length ? ('\n\nâš  CONFIG NOT COMPLETE â€” fill these before installing triggers (installers will refuse):\n - ' + _pf.join('\n - ')) : '';
   return 'Setup complete. Tabs created: App Inbox, App Users, App Log.\n' +
          'Default logins: Todd/0000, Matt/0000 (CHANGE these in the App Users tab now).\n' +
          'ROUTER_SECRET (give this to the Claude scheduled task): ' + secret + _warn;
 }
 
-/** Print the router secret again any time. Run ▸ showSecret. */
+/** Print the router secret again any time. Run â–¸ showSecret. */
 function showSecret() {
-  const s = PropertiesService.getScriptProperties().getProperty('ROUTER_SECRET') || 'Not set — run setup() first.';
+  const s = PropertiesService.getScriptProperties().getProperty('ROUTER_SECRET') || 'Not set â€” run setup() first.';
   Logger.log('ROUTER_SECRET = ' + s);
   return s;
 }
@@ -152,7 +152,7 @@ function styleHeaderRow_(sheet, numCols) {
 }
 
 // ----------------------------------------------------------------------------
-//  AUTH  (name + PIN — lightweight, internal tool)
+//  AUTH  (name + PIN â€” lightweight, internal tool)
 // ----------------------------------------------------------------------------
 function apiLogin(name, pin) {
   name = String(name || '').trim();
@@ -193,7 +193,7 @@ function findUser_(name) {
   return null;
 }
 
-const TOKEN_TTL_MS = 30 * 24 * 60 * 60 * 1000; // 30 days — crew stay signed in on their phone
+const TOKEN_TTL_MS = 30 * 24 * 60 * 60 * 1000; // 30 days â€” crew stay signed in on their phone
 
 function getAuthSecret_() {
   const p = PropertiesService.getScriptProperties();
@@ -285,11 +285,11 @@ function apiSubmit_core_(payload) {
     lock.waitLock(30000);
 
     const user = checkToken_(payload.token);
-    if (!user) return { ok: false, error: 'Session expired — please sign in again.' };
+    if (!user) return { ok: false, error: 'Session expired â€” please sign in again.' };
 
     const ss = SpreadsheetApp.openById(CONFIG.SPREADSHEET_ID);
     const inbox = ss.getSheetByName(CONFIG.INBOX_SHEET);
-    if (!inbox) return { ok: false, error: 'App Inbox tab missing — run setup() once.' };
+    if (!inbox) return { ok: false, error: 'App Inbox tab missing â€” run setup() once.' };
 
     const subId = 'SUB-' + Utilities.formatDate(new Date(), CONFIG.TIMEZONE, 'yyMMdd-HHmmss') +
                   '-' + ('00' + Math.floor(Math.random() * 1000)).slice(-3); // fixed-length: no id is a prefix of another
@@ -299,7 +299,7 @@ function apiSubmit_core_(payload) {
     let photoLinks = [];
     let photoFailures = 0;
     if (payload.photoLinks && payload.photoLinks.length) {
-      // C-2: keep only real links — never let an 'UPLOAD_FAILED' sentinel masquerade as a photo.
+      // C-2: keep only real links â€” never let an 'UPLOAD_FAILED' sentinel masquerade as a photo.
       payload.photoLinks.forEach(function (l) {
         if (/^https?:\/\//i.test(String(l).replace(/^[A-Za-z][A-Za-z ]*:\s+/, ''))) photoLinks.push(l);
         else photoFailures++;
@@ -340,7 +340,7 @@ function apiSubmit_core_(payload) {
       payload.device || '',                         // Device
       'NEW',                                        // Status
       '',                                           // Filed To (Claude fills)
-      photoFailures ? ('⚠ ' + photoFailures + ' photo upload(s) failed at capture — re-capture the photo') : '', // Claude Notes
+      photoFailures ? ('âš  ' + photoFailures + ' photo upload(s) failed at capture â€” re-capture the photo') : '', // Claude Notes
       subId                                         // Submission ID
     ];
     inbox.appendRow(row);
@@ -367,7 +367,7 @@ function apiSubmit_core_(payload) {
  */
 function apiUploadPhoto(payload) {
   const user = checkToken_(payload && payload.token);
-  if (!user) return { ok: false, error: 'Session expired — please sign in again.' };
+  if (!user) return { ok: false, error: 'Session expired â€” please sign in again.' };
   try {
     const p = payload.photo || {};
     const bytes = Utilities.base64Decode(stripDataUrl_(p.data));
@@ -432,7 +432,7 @@ function autoSummary_(payload) {
   ['vendor', 'customer', 'lead', 'item', 'task', 'product', 'supplier', 'note', 'description']
     .forEach(function (k) { if (f[k]) parts.push(f[k]); });
   if (f.amount || f.total) parts.push('$' + (f.total || f.amount));
-  return parts.slice(0, 3).join(' · ') || prettyCategory_(payload.category);
+  return parts.slice(0, 3).join(' Â· ') || prettyCategory_(payload.category);
 }
 
 // ----------------------------------------------------------------------------
@@ -491,7 +491,7 @@ function apiListUsers(token) {
 //  CLAUDE ROUTER API  (doPost)
 //  The scheduled Claude job is the BRAIN: it reads new Inbox rows, decides
 //  which tab + columns each belongs in, and calls these endpoints to do the
-//  actual (safe) writing. Apps Script never decides placement — it just
+//  actual (safe) writing. Apps Script never decides placement â€” it just
 //  executes precise instructions. Every call must carry the shared secret.
 //
 //  POST body (JSON): { secret, action, ...args }
@@ -519,10 +519,10 @@ function doPost(e) {
       case 'setCell':    return jsonOut_(setCell_(body));    // {tab,a1,value}
       case 'markInbox':  return jsonOut_(markInbox_(body));  // {id,status,filedTo,notes}
       case 'sendEmail':  return jsonOut_(sendEmail_(body));  // {to,subject,htmlBody,attachmentBase64,attachmentName,saveToFolderId}
+      case 'driveUpload': return jsonOut_(driveUpload_(body)); // {folderId,name,mime,base64}
       case 'insight':    return jsonOut_(upsertInsight_(body));  // F-3: {type,title,detail,score} upsert w/ fingerprint dedupe
       case 'log':        return jsonOut_(appLog_('Claude', body.message));
       case 'maint':      return jsonOut_(EV_maintAction_(body));   // {fn} whitelisted maintenance: setDigest6am | testDigestMatt | listTriggers | runDigest
-      case 'ops':        return jsonOut_((typeof EV_opsAction_ === 'function') ? EV_opsAction_(body) : { ok: false, error: 'ops module missing' });  // Overnight.js: ocrSelfTest | receiptContext | fileReceipt | quoteLearning | systemHealth | appendSystemLog
       default:           return jsonOut_({ ok: false, error: 'Unknown action: ' + body.action });
     }
   } catch (err) {
@@ -621,7 +621,7 @@ function markInbox_(b) {
 }
 
 function appLog_(source, message) {
-  const sh = ss_().getSheetByName('🗒 App Log');
+  const sh = ss_().getSheetByName('ðŸ—’ App Log');
   if (sh) sh.appendRow([new Date(), source, message]);
   return { ok: true };
 }
@@ -652,7 +652,7 @@ function sendEmail_(b) {
         f.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
         savedUrl = f.getUrl();
       }
-    } catch (err) { /* attachment failed — still send the email body */ }
+    } catch (err) { /* attachment failed â€” still send the email body */ }
   } else if (b.attachmentFileId) {
     try { opts.attachments = [DriveApp.getFileById(b.attachmentFileId).getBlob()]; } catch (err) {}
   }
@@ -665,7 +665,7 @@ function sendEmail_(b) {
 
 /**
  * ============================================================================
- *  EVOLVE AUTONOMY LAYER  (server-side, time-driven — runs on Google servers
+ *  EVOLVE AUTONOMY LAYER  (server-side, time-driven â€” runs on Google servers
  *  24/7, with NO dependency on the Claude desktop app or Todd's PC)
  * ----------------------------------------------------------------------------
  *  Root cause this fixes: the four Claude "Scheduled" tasks were LOCAL desktop
@@ -691,18 +691,18 @@ var EVOLVE = {
 };
 
 /* ----------------------------------------------------------------------------
- *  TRIGGER INSTALLER  (idempotent — safe to re-run)
+ *  TRIGGER INSTALLER  (idempotent â€” safe to re-run)
  * --------------------------------------------------------------------------*/
 function evolveInstallTriggers() {
   // F-2: the legacy evolve* generation is SUPERSEDED by the EV_* generation (AutoServer.gs). Installing
-  // both double-sends every digest/sweep, so this installer no longer schedules the old handlers — it
+  // both double-sends every digest/sweep, so this installer no longer schedules the old handlers â€” it
   // removes any that exist and delegates to the current installers. Kept as a named entry point so old
   // runbooks keep working.
   var legacy = ['evolveDailyPersonalDigest6am','evolveMorningDigest','evolveDispatchSweep','evolveScanReplies','evolveSupplierPriceScan'];
   ScriptApp.getProjectTriggers().forEach(function(t){ if (legacy.indexOf(t.getHandlerFunction()) >= 0) ScriptApp.deleteTrigger(t); });
   var out = [];
   try { out.push(EV_installCore()); } catch(e){ try{ appLog_('Trigger','EV_installCore failed: '+e); }catch(_){} }
-  try { out.push(EV_installGmail()); } catch(e){ /* Gmail scope may not be authorized yet — run EV_installGmail after granting it */ }
+  try { out.push(EV_installGmail()); } catch(e){ /* Gmail scope may not be authorized yet â€” run EV_installGmail after granting it */ }
   try { appLog_('Trigger','evolveInstallTriggers delegated to the EV_* generation; legacy evolve* triggers removed to prevent double-send.'); } catch(e){}
   return evolveListTriggers();
 }
@@ -716,7 +716,7 @@ function evolveListTriggers() {
 }
 
 /* ----------------------------------------------------------------------------
- *  SHARED — sheet readers (defensive, header-aware)
+ *  SHARED â€” sheet readers (defensive, header-aware)
  * --------------------------------------------------------------------------*/
 function evolveSS_() { return (typeof ss_ === 'function') ? ss_() : SpreadsheetApp.openById(CONFIG.SPREADSHEET_ID); }
 
@@ -780,7 +780,7 @@ function evolveMorningDigest() {
   try {
     var html = evolveBuildOpsDigest_();
     sendEmail_({ to: EVOLVE.OWNER_EMAIL,
-                 subject: 'Evolve Morning Digest — ' + evolveToday_(),
+                 subject: 'Evolve Morning Digest â€” ' + evolveToday_(),
                  htmlBody: html,
                  body: 'Open in an HTML-capable client to view the Evolve morning digest.' });
     appLog_('Trigger','Morning ops digest emailed to ' + EVOLVE.OWNER_EMAIL + ' server-side at ' + evolveNowStamp_() + ' (time trigger, no PC).');
@@ -806,12 +806,12 @@ function evolveBuildOpsDigest_() {
       if (!String(dep).trim()) missing.push('deposit');
       if (!String(inv).trim()) missing.push('invoice');
       if (!String(paid).trim()) missing.push('paid');
-      if (missing.length) pend.push('<b>'+evolveEsc_(job)+'</b> — awaiting: ' + missing.join(', '));
+      if (missing.length) pend.push('<b>'+evolveEsc_(job)+'</b> â€” awaiting: ' + missing.join(', '));
     });
-    P.push(evolveSection_('💵 Money loop (deposit → invoice → paid)',
+    P.push(evolveSection_('ðŸ’µ Money loop (deposit â†’ invoice â†’ paid)',
       pend.length ? '<ul><li>'+pend.join('</li><li>')+'</li></ul>'
                   : '<i>All tracked jobs clear, or no booked jobs yet.</i>'));
-  } catch(e){ P.push(evolveSection_('💵 Money loop','<i>Section unavailable: '+evolveEsc_(e.message)+'</i>')); }
+  } catch(e){ P.push(evolveSection_('ðŸ’µ Money loop','<i>Section unavailable: '+evolveEsc_(e.message)+'</i>')); }
 
   // Overdue / open Action Items
   try {
@@ -824,15 +824,15 @@ function evolveBuildOpsDigest_() {
       var item = evolveField_(r,/(action|item|task|follow|next|detail|note)/i) || ('Row '+r._row);
       var dueRaw = evolveField_(r,/(due|date)/i);
       var due = evolveAsDate_(dueRaw);
-      if (due && due < today) over.push('<b>'+evolveEsc_(item)+'</b> — due '+Utilities.formatDate(due,EVOLVE.TZ,'MMM d'));
-      else open.push(evolveEsc_(item) + (due ? ' — due '+Utilities.formatDate(due,EVOLVE.TZ,'MMM d') : ''));
+      if (due && due < today) over.push('<b>'+evolveEsc_(item)+'</b> â€” due '+Utilities.formatDate(due,EVOLVE.TZ,'MMM d'));
+      else open.push(evolveEsc_(item) + (due ? ' â€” due '+Utilities.formatDate(due,EVOLVE.TZ,'MMM d') : ''));
     });
     var body = '';
     if (over.length) body += '<div style="color:#b00020"><b>OVERDUE</b><ul><li>'+over.join('</li><li>')+'</li></ul></div>';
     if (open.length) body += '<b>Open</b><ul><li>'+open.join('</li><li>')+'</li></ul>';
     if (!body) body = '<i>No open follow-ups. Clean slate.</i>';
-    P.push(evolveSection_('✅ Follow-ups', body));
-  } catch(e){ P.push(evolveSection_('✅ Follow-ups','<i>Section unavailable: '+evolveEsc_(e.message)+'</i>')); }
+    P.push(evolveSection_('âœ… Follow-ups', body));
+  } catch(e){ P.push(evolveSection_('âœ… Follow-ups','<i>Section unavailable: '+evolveEsc_(e.message)+'</i>')); }
 
   // Outstanding quotes
   try {
@@ -844,12 +844,12 @@ function evolveBuildOpsDigest_() {
       var id = evolveField_(r,/(quote|id|#|ref)/i);
       var cust = evolveField_(r,/(customer|client|name|company)/i);
       var amt = evolveField_(r,/(amount|total|price|value|\$)/i);
-      var line = [id,cust,amt].filter(function(x){return String(x).trim();}).map(evolveEsc_).join(' — ');
+      var line = [id,cust,amt].filter(function(x){return String(x).trim();}).map(evolveEsc_).join(' â€” ');
       if (line) out.push(line + (st?(' <i>('+evolveEsc_(st)+')</i>'):''));
     });
-    P.push(evolveSection_('📄 Quotes in play',
+    P.push(evolveSection_('ðŸ“„ Quotes in play',
       out.length ? '<ul><li>'+out.join('</li><li>')+'</li></ul>' : '<i>No open quotes.</i>'));
-  } catch(e){ P.push(evolveSection_('📄 Quotes in play','<i>Section unavailable: '+evolveEsc_(e.message)+'</i>')); }
+  } catch(e){ P.push(evolveSection_('ðŸ“„ Quotes in play','<i>Section unavailable: '+evolveEsc_(e.message)+'</i>')); }
 
   // App Inbox backlog
   try {
@@ -858,10 +858,10 @@ function evolveBuildOpsDigest_() {
       var st = String(evolveField_(r,/status/i)).toLowerCase();
       return st.indexOf('filed') < 0;
     });
-    P.push(evolveSection_('🔥 Field App inbox',
+    P.push(evolveSection_('ðŸ”¥ Field App inbox',
       nu.length ? ('<b>'+nu.length+'</b> submission(s) awaiting filing. The dispatch sweep will process them; see App Inbox.')
-                : '<i>Inbox clear — every submission filed.</i>'));
-  } catch(e){ P.push(evolveSection_('🔥 Field App inbox','<i>Section unavailable: '+evolveEsc_(e.message)+'</i>')); }
+                : '<i>Inbox clear â€” every submission filed.</i>'));
+  } catch(e){ P.push(evolveSection_('ðŸ”¥ Field App inbox','<i>Section unavailable: '+evolveEsc_(e.message)+'</i>')); }
 
   P.push(evolveFooter_());
   return P.join('');
@@ -875,7 +875,7 @@ function evolveDailyPersonalDigest6am() {
   try {
     var html = evolveBuildPersonalDigest_();
     sendEmail_({ to: EVOLVE.OWNER_EMAIL,
-                 subject: 'The Daily Digest — ' + evolveToday_(),
+                 subject: 'The Daily Digest â€” ' + evolveToday_(),
                  htmlBody: html,
                  body: 'Open in an HTML-capable client to view your daily to-do digest.' });
     appLog_('Trigger','Personal 6am digest emailed to ' + EVOLVE.OWNER_EMAIL + ' server-side at ' + evolveNowStamp_() + ' (time trigger, no PC).');
@@ -902,12 +902,12 @@ function evolveBuildPersonalDigest_() {
       } else done++;
     });
     var body = '';
-    body += '<p>You have <b>'+open.length+'</b> open item(s)'+(done?(' · '+done+' already done — nice'):'')+'.</p>';
+    body += '<p>You have <b>'+open.length+'</b> open item(s)'+(done?(' Â· '+done+' already done â€” nice'):'')+'.</p>';
     if (open.length) body += '<ul><li>'+open.slice(0,40).join('</li><li>')+'</li></ul>';
-    else body += '<p>Inbox-zero on tasks. Go blast something. 🚀</p>';
-    P.push(evolveSection_('📋 Today\'s list', body));
-  } catch(e){ P.push(evolveSection_('📋 Today\'s list','<i>To-Do tab unavailable: '+evolveEsc_(e.message)+'</i>')); }
-  P.push('<p style="font-size:13px;color:#555">Reply to this email to add items — I read replies every 15 minutes and confirm what I captured.</p>');
+    else body += '<p>Inbox-zero on tasks. Go blast something. ðŸš€</p>';
+    P.push(evolveSection_('ðŸ“‹ Today\'s list', body));
+  } catch(e){ P.push(evolveSection_('ðŸ“‹ Today\'s list','<i>To-Do tab unavailable: '+evolveEsc_(e.message)+'</i>')); }
+  P.push('<p style="font-size:13px;color:#555">Reply to this email to add items â€” I read replies every 15 minutes and confirm what I captured.</p>');
   P.push(evolveFooter_());
   return P.join('');
 }
@@ -956,23 +956,23 @@ function evolveDispatchSweep() {
   // ALWAYS write a heartbeat so absence of a server run is detectable
   try {
     appLog_('Trigger','Dispatch sweep ran server-side at ' + evolveNowStamp_() +
-      ' — unfiled inbox: ' + unfiled + ', overdue: ' + overdue + ', money-loop gaps: ' + moneyGaps + '.');
+      ' â€” unfiled inbox: ' + unfiled + ', overdue: ' + overdue + ', money-loop gaps: ' + moneyGaps + '.');
   } catch(e){}
 
   // Email Todd only when there is something to act on
   if (alerts.length) {
     try {
-      var html = evolveHeader_('Dispatch Sweep — action needed', evolveNowStamp_()) +
+      var html = evolveHeader_('Dispatch Sweep â€” action needed', evolveNowStamp_()) +
         evolveSection_('Needs your attention', '<ul><li>'+alerts.map(evolveEsc_).join('</li><li>')+'</li></ul>') +
         evolveFooter_();
-      sendEmail_({ to: EVOLVE.OWNER_EMAIL, subject: 'Evolve dispatch — ' + alerts.length + ' item(s) need you', htmlBody: html, body: alerts.join('; ') });
+      sendEmail_({ to: EVOLVE.OWNER_EMAIL, subject: 'Evolve dispatch â€” ' + alerts.length + ' item(s) need you', htmlBody: html, body: alerts.join('; ') });
     } catch(e){ try{ appLog_('Trigger','Dispatch sweep email ERROR: '+e.message);}catch(_){} }
   }
   return 'sweep ok (' + alerts.length + ' alerts)';
 }
 
 /* ----------------------------------------------------------------------------
- *  EMAIL REPLY MONITOR  (NEW — did not exist)
+ *  EMAIL REPLY MONITOR  (NEW â€” did not exist)
  *  Scans Gmail for replies from Todd, captures action items into the workbook,
  *  applies light actions, marks the thread Processed, and confirms by reply.
  * --------------------------------------------------------------------------*/
@@ -997,7 +997,7 @@ function evolveScanReplies() {
       var acted = [];
       try { acted = evolveActOnItems_(items); } catch(e){}
       try {
-        var conf = evolveHeader_('Got it — captured from your reply', evolveNowStamp_()) +
+        var conf = evolveHeader_('Got it â€” captured from your reply', evolveNowStamp_()) +
           evolveSection_('Logged to your workbook (' + filed + ' item(s))',
             '<ul><li>'+items.slice(0,25).map(evolveEsc_).join('</li><li>')+'</li></ul>') +
           (acted.length ? evolveSection_('Actioned automatically','<ul><li>'+acted.map(evolveEsc_).join('</li><li>')+'</li></ul>') : '') +
@@ -1028,7 +1028,7 @@ function evolveExtractItems_(body){
     if (/^On .+ wrote:$/.test(ln)) break;
     if (/^-{2,}/.test(ln)) break;
     if (/^(sent from|get outlook|thanks|cheers|todd)\b/i.test(ln)) continue;
-    ln = ln.replace(/^[-*•\d.\)\s]+/, '').trim();
+    ln = ln.replace(/^[-*â€¢\d.\)\s]+/, '').trim();
     if (ln.length >= 2) out.push(ln);
   }
   var seen = {}, res = [];
@@ -1085,7 +1085,7 @@ function evolveActOnItems_(items){
 function evolveSupplierPriceScan() {
   if (typeof EV_dispatchSweep === 'function') return; // F-2: superseded by the EV_* generation
   try {
-    var html = evolveHeader_('Supplier price scan — biweekly', evolveToday_());
+    var html = evolveHeader_('Supplier price scan â€” biweekly', evolveToday_());
     var snap = '';
     try {
       var pw = evolveTable_('price', ['item','supplier','price','paid','watch','sku','product']);
@@ -1094,22 +1094,22 @@ function evolveSupplierPriceScan() {
           var item = evolveField_(r,/(item|product|sku|name)/i);
           var price = evolveField_(r,/(price|paid|cost|\$)/i);
           var sup = evolveField_(r,/(supplier|vendor|source)/i);
-          return '<li>'+[item,sup,price].filter(function(x){return String(x).trim();}).map(evolveEsc_).join(' — ')+'</li>';
+          return '<li>'+[item,sup,price].filter(function(x){return String(x).trim();}).map(evolveEsc_).join(' â€” ')+'</li>';
         }).join('');
         snap = '<ul>'+rows+'</ul>';
       }
     } catch(e){}
     html += evolveSection_('Current Price Watch', snap || '<i>No Price Watch rows found.</i>');
-    html += evolveSection_('Action', 'Run a fresh internet price comparison on these supplies and update Price Watch. (Open Cowork and say "run the supplier price scan" — the desktop agent does the web comparison; this reminder fires server-side so the cadence never lapses.)');
+    html += evolveSection_('Action', 'Run a fresh internet price comparison on these supplies and update Price Watch. (Open Cowork and say "run the supplier price scan" â€” the desktop agent does the web comparison; this reminder fires server-side so the cadence never lapses.)');
     html += evolveFooter_();
-    sendEmail_({ to: EVOLVE.OWNER_EMAIL, subject: 'Evolve supplier price scan — ' + evolveToday_(), htmlBody: html, body: 'Biweekly price scan reminder.' });
+    sendEmail_({ to: EVOLVE.OWNER_EMAIL, subject: 'Evolve supplier price scan â€” ' + evolveToday_(), htmlBody: html, body: 'Biweekly price scan reminder.' });
     appLog_('Trigger','Supplier price scan reminder emailed server-side at ' + evolveNowStamp_() + '.');
   } catch(e){ try{ appLog_('Trigger','Price scan ERROR: '+e.message);}catch(_){} }
   return 'price scan ok';
 }
 
 /* ----------------------------------------------------------------------------
- *  EMAIL CHROME — small, branded, inline-styled
+ *  EMAIL CHROME â€” small, branded, inline-styled
  * --------------------------------------------------------------------------*/
 function evolveHeader_(title, sub){
   return '<div style="font-family:Arial,Helvetica,sans-serif;max-width:640px;margin:0 auto;border:1px solid #e3e6e8;border-radius:10px;overflow:hidden">'
@@ -1125,7 +1125,7 @@ function evolveSection_(h, bodyHtml){
 }
 function evolveFooter_(){
   return '<div style="margin-top:18px;padding-top:10px;border-top:1px solid #e3e6e8;color:#7a8a80;font-size:12px">'
-    + 'Sent automatically by the Evolve router on Google servers at '+evolveNowStamp_()+' — no PC or desktop app required. '
+    + 'Sent automatically by the Evolve router on Google servers at '+evolveNowStamp_()+' â€” no PC or desktop app required. '
     + 'Reply to this email to add items; I scan replies every 15 minutes.'
     + '</div></div></div>';
 }
@@ -1137,10 +1137,10 @@ function evolveFooter_(){
  * --------------------------------------------------------------------------*/
 function evolveSelfTest() {
   var who = Session.getEffectiveUser().getEmail();
-  var html = evolveHeader_('Autonomy self-test ✅', evolveNowStamp_())
-    + evolveSection_('Proof', 'This email was composed and sent by a Google Apps Script <b>time-driven trigger</b> running on Google servers — the Claude desktop app was not involved. If you are reading this in the Sent folder, server-side autonomy is working.')
+  var html = evolveHeader_('Autonomy self-test âœ…', evolveNowStamp_())
+    + evolveSection_('Proof', 'This email was composed and sent by a Google Apps Script <b>time-driven trigger</b> running on Google servers â€” the Claude desktop app was not involved. If you are reading this in the Sent folder, server-side autonomy is working.')
     + evolveFooter_();
-  sendEmail_({ to: who, subject: 'Evolve Autonomy Self-Test ✅ (server-side, safe to ignore)', htmlBody: html, body: 'Server-side self-test.' });
+  sendEmail_({ to: who, subject: 'Evolve Autonomy Self-Test âœ… (server-side, safe to ignore)', htmlBody: html, body: 'Server-side self-test.' });
   appLog_('Trigger','SELF-TEST: server-side email sent to ' + who + ' at ' + evolveNowStamp_() + ' with NO desktop app. Autonomy confirmed.');
   ScriptApp.getProjectTriggers().forEach(function(t){
     if (t.getHandlerFunction() === 'evolveSelfTest') {
@@ -1154,4 +1154,15 @@ function evolveScheduleSelfTest() {
   ScriptApp.newTrigger('evolveSelfTest').timeBased().after(3 * 60 * 1000).create();
   try { appLog_('Trigger','Scheduled one-off self-test ~3 min out at ' + evolveNowStamp_() + '.'); } catch(e){}
   return 'self-test scheduled ~3 min out';
+}
+
+function driveUpload_(b){
+  try{
+    var folder = DriveApp.getFolderById(b.folderId);
+    var raw = (typeof stripDataUrl_==='function') ? stripDataUrl_(b.base64) : b.base64;
+    var bytes = Utilities.base64Decode(raw);
+    var blob = Utilities.newBlob(bytes, b.mime || 'image/jpeg', b.name || 'receipt.jpg');
+    var f = folder.createFile(blob);
+    return { ok:true, id:f.getId(), url:f.getUrl(), name:f.getName() };
+  }catch(e){ return { ok:false, error:String(e) }; }
 }

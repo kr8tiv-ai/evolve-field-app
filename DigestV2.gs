@@ -318,6 +318,9 @@ function EV_buildMorningDigestHtml_() {
   // ===== EQUIPMENT MAINTENANCE (reads the Maintenance tab; gentle next-due heads-up) =====
   try { H.push(EV_maintenanceCard_() || ''); } catch (e) {}
 
+  // ===== OVERNIGHT SYSTEM TUNE-UP (reads System Log; skips silently if no entry yet) =====
+  try { H.push(EV_overnightTuneupCard_() || ''); } catch (e) {}
+
   // ===== REMINDERS (standing) =====
   H.push(EV_v2card_('📌', 'Little habits we’re building', '<ul style="margin:0;padding-left:18px;font-size:14px;color:' + EV_UI.body + ';line-height:1.5;">' +
     '<li style="margin:5px 0;"><b>New this week:</b> we’ve added a safety sign-off (FLHA) to the field app — giving it a first run today. Before each job, the crew does a quick hazard check and signs off before blasting. A couple of taps, everyone stays safe, and it looks sharp to clients.</li>' +
