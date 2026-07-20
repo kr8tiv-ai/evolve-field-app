@@ -1,3 +1,4 @@
+> **Part of the [Evolved](https://github.com/kr8tiv-ai/evolved) system** — the free, open-source business operating system any service company can stand up for itself. This field app is the crew's **hands**; the [MCP](https://github.com/kr8tiv-ai/evolved) is the brain, a Google Sheets workbook is the spine, and the [owner dashboard](https://ops.evolveecoblasting.com) is the owner's eyes. One complete system, all MIT. Stand up your own: [docs/STAND-UP-YOUR-OWN.md](https://github.com/kr8tiv-ai/evolved/blob/main/docs/STAND-UP-YOUR-OWN.md).
 <p align="center">
   <img src="app-frame/evolve-icon.png" width="116" alt="Evolve Field App">
 </p>
